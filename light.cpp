@@ -77,7 +77,7 @@ struct Sphere : public Object {
 	float intersect(const Ray& ray) const override {
 		auto b = (2.f * (ray.origin - centre)).dot(ray.direction);
     auto r2 = radius * radius;
-		auto c = (ray.origin - centre).dot((ray.origin - centre)) - r2;
+		auto c = (ray.origin - centre).squaredNorm() - r2;
 		auto disc = b*b - 4*c;
 		if (disc < 0.f) {
       return 0.f;
@@ -86,7 +86,7 @@ struct Sphere : public Object {
     }
 		auto sol1 = -b + disc;
 		auto sol2 = -b - disc;
-		return (sol2>eps) ? sol2/2 : ((sol1>eps) ? sol1/2 : 0);
+		return (sol2>eps) ? sol2*.5f : ((sol1>eps) ? sol1*.5f : 0.f);
 	}
 
 	Vector normal(const Vector& point) const {
@@ -138,7 +138,7 @@ Vector camcr(float x, float y, std::uint32_t width, std::uint32_t height) {
 }
 
 Vector hemisphere(float u1, float u2) {
-	const float r = sqrt(1.0-u1*u1);
+	const float r = sqrtf(1.f - u1*u1);
 	const float phi = 2 * M_PI * u2;
 	return Vector(cos(phi)*r, sin(phi)*r, u1);
 }
@@ -168,8 +168,7 @@ struct Halton {
 	float get() { return value; }
 };
 
-std::tuple<Vector, Vector, Vector>
-orthonormalSystem(const Vector& v1) {
+Eigen::Matrix3f orthonormalSystem(const Vector& v1) {
     Vector v2;
 		Vector v1abs = v1.array().abs();
 		Vector v1sq = v1.cwiseProduct(v1);
@@ -186,7 +185,8 @@ orthonormalSystem(const Vector& v1) {
 		  float invLen = 1.0f / std::sqrt(v1y2 + v1z2);
 		  v2 = Vector(0.f, v1z * invLen, -v1y * invLen);
     }
-    return std::make_tuple(v1, v2, v1.cross(v2));
+		Eigen::Matrix3f m; m << v2, v1.cross(v2), v1;
+    return m;
 }
 
 std::random_device rd;
@@ -222,11 +222,8 @@ Vector trace(Ray &ray, const Scene& scene, int depth, float refractiveIndex, Hal
 
 	// Diffuse BRDF - choose an outgoing direction with hemisphere sampling.
 	if(intersection.object->type == Material::diffuse) {
-		Vector rotX, rotY;
-		std::tie(std::ignore, rotX, rotY) = orthonormalSystem(N);
-		Vector sampledDir = hemisphere(RND2, RND2);
-		Eigen::Matrix3f m; m << rotX, rotY, N;
-		ray.direction = m * sampledDir;	// already normalized
+		const Eigen::Matrix3f R = orthonormalSystem(N);
+		ray.direction = R * hemisphere(RND2, RND2);	// Rotation applied to normalised vector is still unit.
 		float cost = ray.direction.dot(N);
 		auto result = trace(ray, scene, depth + 1, refractiveIndex, hal, hal2);
 		clr += (result.cwiseProduct(intersection.object->colour)) * cost * 0.1 * rrFactor;
@@ -237,7 +234,7 @@ Vector trace(Ray &ray, const Scene& scene, int depth, float refractiveIndex, Hal
 	// direction -> one outgoing direction, that is, the perfect reflection direction.
 	if(intersection.object->type == Material::specular) {
 		auto cost = ray.direction.dot(N);
-		ray.direction = (ray.direction - N*(cost*2)).normalized();
+		ray.direction = (ray.direction - N * (cost * 2.f)).normalized();
 		auto result = trace(ray, scene, depth + 1, refractiveIndex, hal, hal2);
 		clr += result * rrFactor;
 	}
@@ -282,6 +279,7 @@ getArgs(int argc, char** argv) {
     ("height,h", po::value<std::uint32_t>()->default_value(200), "Output image height.")
     ("samples,s", po::value<std::uint32_t>()->default_value(32), "Samples per pixel.")
     ("refractive-index,n", po::value<float>()->default_value(1.5), "Refractive index.")
+		("aa-noise-scale,a", po::value<float>()->default_value(1.0/700), "Scale for pixel space anti-aliasing noise.")
   ;
 
   po::variables_map vars;
@@ -320,6 +318,7 @@ int main(int argc, char** argv) {
 
 	// // Radius, position, color, emission, type (1=diff, 2=spec, 3=refr) for spheres
 	add(new Sphere(Vector(-0.75,-1.45,-4.4), 1.05), Vector(4,8,4), 0, Material::specular); // Middle sphere
+	//add(new Sphere(Vector(1.5,1.5,-4.4), 1.f), Vector(10,2,1), 0, Material::specular); // High sphere
 	add(new Sphere(Vector(2.0,-2.05,-3.7), 0.5), Vector(10,10,1), 0, Material::refractive); // Right sphere
 	add(new Sphere(Vector(-1.75,-1.95,-3.1), 0.6), Vector(4,4,12), 0, Material::diffuse); // Left sphere
 	// Position, normal, color, emission, type for planes
@@ -339,6 +338,7 @@ int main(int argc, char** argv) {
   const auto height = args.at("height").as<std::uint32_t>();
 	const auto spp = args.at("samples").as<std::uint32_t>();
   const auto refractiveIndex = args.at("refractive-index").as<float>();
+	const auto antiAliasingScale = args.at("aa-noise-scale").as<float>();
 
 	Vector **pix = new Vector*[width];
 	for(std::uint32_t i = 0; i<width; ++i) {
@@ -358,8 +358,8 @@ int main(int argc, char** argv) {
 		for(std::uint32_t row = 0; row < height; ++row) {
 			for(std::uint32_t s = 0; s < spp; ++s) {
 				Vector cam = camcr(col, row, width, height); // construct image plane coordinates
-				Vector aaNoise(RND/100, RND/100, 0.f);
-				cam += aaNoise;
+				Vector aaNoise(RND, RND, 0.f);
+				cam += aaNoise * antiAliasingScale;
 				Ray ray(Vector(0, 0, 0), cam);
 				auto color = trace(ray, scene, 0, refractiveIndex, hal, hal2);
 				pix[col][row] = pix[col][row] + color / spp; // write the contributions
