@@ -3,48 +3,18 @@
 #include <cstdlib>
 #include <string>
 #include <limits>
+#include <memory>
+#include <cmath>
+#include <tuple>
+#include <random>
 
 #include <boost/program_options.hpp>
 #include <Eigen/Dense>
 
-boost::program_options::variables_map
-getArgs(int argc, char** argv) {
-  namespace po = boost::program_options;
-  po::options_description desc(std::string(argv[0]) + " usage:");
-  desc.add_options()
-    ("help", "Output help and exit.")
-    ("outfile,o", po::value<std::string>()->required(), "Set output file name.")
-    ("width,w", po::value<std::uint32_t>()->default_value(200), "Output image width.")
-    ("height,h", po::value<std::uint32_t>()->default_value(200), "Output image height.")
-    ("samples,s", po::value<std::uint32_t>()->default_value(32), "Samples per pixel.")
-  ;
-
-  po::variables_map vars;
-  auto parsed = po::parse_command_line(argc, argv, desc);
-  po::store(parsed, vars);
-  if (vars.count("help")) {
-    std::cout << desc << "\n";
-    exit(-1);
-  }
-  po::notify(vars);
-
-  std::ofstream optsFile(vars.at("outfile").as<std::string>() + ".command_line_options");
-  for (const auto& opt: parsed.options) {
-    if (!opt.unregistered) {
-      optsFile << opt.string_key << " : ";
-      for (auto c: opt.value) {
-        optsFile << c << " ";
-      }
-    }
-    optsFile << "\n";
-  }
-
-  return vars;
-}
-
 namespace light {
 
 using Vector = Eigen::Vector3f;
+static float eps = 1e-6; //std::numeric_limits<float>::epsilon();
 
 struct Ray {
 	Vector origin;
@@ -65,16 +35,18 @@ struct Object {
 	float emission;
 	Material type;
   Object() : colour(0.f, 0.f, 0.f), emission(0.f), type(Material::diffuse) {}
-	Object(const Vector& c, float e, Material m) : colour(c), emission(e), type(m) {}
+
+	void setMaterial(const Vector& c, float e, Material m) {
+    colour = c;
+    emission = e;
+    type = m;
+  }
+
   virtual ~Object() {}
 
 	virtual Vector normal(const Vector&) const = 0;
   virtual float intersect(const Ray&) const = 0;
-
-  static float eps;
 };
-
-float Object::eps = std::numeric_limits<float>::epsilon();
 
 struct Plane : public Object {
 	Vector n;
@@ -107,10 +79,10 @@ struct Sphere : public Object {
     auto r2 = radius * radius;
 		auto c = (ray.origin - centre).dot((ray.origin - centre)) - r2;
 		auto disc = b*b - 4*c;
-		if (disc<0) {
+		if (disc < 0.f) {
       return 0.f;
     } else {
-      disc = sqrt(disc);
+      disc = sqrtf(disc);
     }
 		auto sol1 = -b + disc;
 		auto sol2 = -b - disc;
@@ -122,17 +94,295 @@ struct Sphere : public Object {
 	}
 };
 
+struct Intersection {
+	const Object* object;
+	float t;
+	Intersection() : object(nullptr), t(std::numeric_limits<float>::infinity()) {}
+	Intersection(const Object* const o, float t) : object(o), t(t) {}
+  Intersection& operator = (const Intersection& other) {
+    object = other.object;
+    t = other.t;
+    return *this;
+  }
+	operator bool() { return object != nullptr; }
+};
+
+struct Scene {
+	std::vector<Object*> objects;
+
+	void add(Object* object) {
+		objects.push_back(object);
+	}
+
+	Intersection intersect(const Ray& ray) const {
+		Intersection closestIntersection;
+    // Dumb linear search:
+		for (const auto o: objects) {
+			auto t = o->intersect(ray);
+			if (t > eps && t < closestIntersection.t) {
+				closestIntersection = Intersection(o, t);
+			}
+		}
+		return closestIntersection;
+	}
+};
+
+Vector camcr(float x, float y, std::uint32_t width, std::uint32_t height) {
+	float w = width;
+	float h = height;
+	float fovx = M_PI/4;
+	float fovy = (h/w) * fovx;
+	return Vector(((2*x-w)/w) * tan(fovx),
+				-((2*y-h)/h) * tan(fovy),
+				-1.0);
+}
+
+Vector hemisphere(double u1, double u2) {
+	const double r = sqrt(1.0-u1*u1);
+	const double phi = 2 * M_PI * u2;
+	return Vector(cos(phi)*r, sin(phi)*r, u1);
+}
+
+struct Halton {
+	float value, inv_base;
+
+	void number(int i,int base) {
+		float f = inv_base = 1.0 / base;
+		value = 0.0;
+		while(i > 0) {
+			value += f * (float)(i%base);
+			i /= base;
+			f *= inv_base;
+		}
+	}
+
+	void next() {
+		float r = 1.0 - value - 0.0000001;
+		if(inv_base<r) value += inv_base;
+		else {
+			float h = inv_base, hh;
+			do {hh = h; h *= inv_base;} while(h >=r);
+			value += hh + h - 1.0;
+		}
+	}
+	float get() { return value; }
+};
+
+std::tuple<Vector, Vector, Vector>
+orthonormalSystem(const Vector& v1) {
+    Vector v2;
+    if (std::abs(v1(0)) > std::abs(v1(1))) {
+		  float invLen = 1.f / std::sqrt(v1(0) * v1(0) + v1(2) * v1(2));
+		  v2 = Vector(-v1(2) * invLen, 0.f, v1(0) * invLen);
+    } else {
+		  float invLen = 1.0f / std::sqrt(v1(1) * v1(1) + v1(2) * v1(2));
+		  v2 = Vector(0.f, v1(2) * invLen, -v1(1) * invLen);
+    }
+    return std::make_tuple(v1, v2, v1.cross(v2));
+}
+
+std::random_device rd;
+std::mt19937 mersenneTwister(rd());
+std::uniform_real_distribution<float> uniform;
+#define RND (2.f*uniform(mersenneTwister) - 1.f)
+#define RND2 (uniform(mersenneTwister))
+
+void trace(Ray &ray, const Scene& scene, int depth, Vector& clr,
+           float refractiveIndex, Halton& hal, Halton& hal2) {
+	// Russian roulette: starting at depth 5, each recursive step will stop with a probability of 0.1
+	double rrFactor = 1.0;
+	if (depth >= 5) {
+		const double rrStopProbability = 0.1;
+		if (RND2 <= rrStopProbability) {
+			return;
+		}
+		rrFactor = 1.0 / (1.0 - rrStopProbability);
+	}
+
+	Intersection intersection = scene.intersect(ray);
+	if (!intersection) return;
+
+	// Travel the ray to the hit point where the closest object lies and compute the surface normal there.
+	Vector hp = ray.origin + ray.direction * intersection.t;
+	Vector N = intersection.object->normal(hp);
+	ray.origin = hp;
+	// Add the emission, the L_e(x,w) part of the rendering equation, but scale it with the Russian Roulette
+	// probability weight.
+	const auto emission = intersection.object->emission;
+	clr = clr + Vector(emission, emission, emission) * rrFactor;
+
+	// Diffuse BRDF - choose an outgoing direction with hemisphere sampling.
+	if(intersection.object->type == Material::diffuse) {
+		Vector rotX, rotY;
+		std::tie(std::ignore, rotX, rotY) = orthonormalSystem(N);
+		Vector sampledDir = hemisphere(RND2,RND2);
+		Vector rotatedDir(
+      Vector(rotX(0), rotY(0), N(0)).dot(sampledDir),
+		  Vector(rotX(1), rotY(1), N(1)).dot(sampledDir),
+		  Vector(rotX(2), rotY(2), N(2)).dot(sampledDir)
+    );
+		ray.direction = rotatedDir;	// already normalized
+		double cost=ray.direction.dot(N);
+		Vector tmp;
+		trace(ray, scene, depth + 1, tmp, refractiveIndex, hal, hal2);
+		clr = clr + (tmp.cwiseProduct(intersection.object->colour)) * cost * 0.1 * rrFactor;
+	}
+
+	// Specular BRDF - this is a singularity in the rendering equation that follows
+	// delta distribution, therefore we handle this case explicitly - one incoming
+	// direction -> one outgoing direction, that is, the perfect reflection direction.
+	if(intersection.object->type == Material::specular) {
+		auto cost = ray.direction.dot(N);
+		ray.direction = (ray.direction - N*(cost*2)).normalized();
+		Vector tmp = Vector(0, 0, 0);
+		trace(ray, scene, depth + 1, tmp, refractiveIndex, hal, hal2);
+		clr = clr + tmp * rrFactor;
+	}
+
+	// Glass/refractive BRDF - we use the vector version of Snell's law and Fresnel's law
+	// to compute the outgoing reflection and refraction directions and probability weights.
+	if(intersection.object->type == Material::refractive) {
+		auto n = refractiveIndex;
+		auto R0 = (1.0-n)/(1.0+n);
+		R0 = R0*R0;
+		if(N.dot(ray.direction)>0) { // we're inside the medium
+			N = N*-1;
+			n = 1/n;
+		}
+		n=1/n;
+		auto cost1 = (N.dot(ray.direction))*-1; // cosine of theta_1
+		auto cost2 = 1.0 - n*n*(1.0-cost1*cost1); // cosine of theta_2
+		auto Rprob = R0 + (1.0-R0) * powf(1.0 - cost1, 5.0); // Schlick-approximation
+		if (cost2 > 0 && RND2 > Rprob) { // refraction direction
+			ray.direction = ((ray.direction*n)+(N*(n*cost1-sqrt(cost2)))).normalized();
+		} else { // reflection direction
+			ray.direction = (ray.direction+N*(cost1*2)).normalized();
+		}
+		Vector tmp;
+		trace(ray, scene, depth + 1, tmp, refractiveIndex, hal, hal2);
+		clr = clr + tmp * 1.15 * rrFactor;
+	}
+}
+
+} // end namespace light
+
+boost::program_options::variables_map
+getArgs(int argc, char** argv) {
+  namespace po = boost::program_options;
+  po::options_description desc(std::string(argv[0]) + " usage:");
+  desc.add_options()
+    ("help", "Output help and exit.")
+    ("outfile,o", po::value<std::string>()->required(), "Set output file name.")
+    ("width,w", po::value<std::uint32_t>()->default_value(200), "Output image width.")
+    ("height,h", po::value<std::uint32_t>()->default_value(200), "Output image height.")
+    ("samples,s", po::value<std::uint32_t>()->default_value(32), "Samples per pixel.")
+    ("refractive-index,n", po::value<float>()->default_value(1.5), "Refractive index.")
+  ;
+
+  po::variables_map vars;
+  auto parsed = po::parse_command_line(argc, argv, desc);
+  po::store(parsed, vars);
+  if (vars.count("help")) {
+    std::cout << desc << "\n";
+    exit(-1);
+  }
+  po::notify(vars);
+
+  std::ofstream optsFile(vars.at("outfile").as<std::string>() + ".command_line_options");
+  for (const auto& opt: parsed.options) {
+    if (!opt.unregistered) {
+      optsFile << opt.string_key << " : ";
+      for (auto c: opt.value) {
+        optsFile << c << " ";
+      }
+    }
+    optsFile << "\n";
+  }
+
+  return vars;
 }
 
 int main(int argc, char** argv) {
   const auto args = getArgs(argc, argv);
 
-  std::cerr << "light::Object epsilon: " << light::Object::eps << "\n";
+  std::cerr << "light epsilon: " << light::eps << "\n";
 
-  Eigen::VectorXf r1(3,1);
-  Eigen::VectorXf r2(3,1);
-  r1 << 0.1, 0, 0;
-  auto ray = light::Ray(r1, r1);
-  std::cout << "result: " << ray.direction.transpose() << "\n";
+  using namespace light;
+  Scene scene;
+	auto add = [&scene](Object* s, Vector cl, double emission, Material type) {
+			s->setMaterial(cl, emission, type);
+			scene.add(s);
+	};
+
+	// // Radius, position, color, emission, type (1=diff, 2=spec, 3=refr) for spheres
+	//add(new Sphere(Vector(-0.75,-1.45,-4.4), 1.05), Vector(4,8,4), 0, Material::specular); // Middle sphere
+	// add(new Sphere(Vector(2.0,-2.05,-3.7), 0.5), Vector(10,10,1), 0, Material::refractive); // Right sphere
+	// add(new Sphere(Vector(-1.75,-1.95,-3.1), 0.6), Vector(4,4,12), 0, Material::diffuse); // Left sphere
+	// // Position, normal, color, emission, type for planes
+  const auto X = Vector(1, 0, 0);
+  const auto Y = Vector(0, 1, 0);
+  const auto Z = Vector(0, 0, 1);
+	add(new Plane(Y, 2.5), Vector(6,6,6), 0, Material::diffuse); // Bottom plane
+	add(new Plane(Z, 5.5), Vector(6,6,6), 0, Material::diffuse); // Back plane
+	add(new Plane(X, 2.75), Vector(10,2,2), 0, Material::diffuse); // Left plane
+	// add(new Plane(-X, 2.75), Vector(2,10,2), 0, Material::diffuse); // Right plane
+	// add(new Plane(-Y, 3.0), Vector(6,6,6), 0, Material::diffuse); // Ceiling plane
+	// add(new Plane(-Z, 0.5), Vector(6,6,6), 0, Material::diffuse); // Front plane
+	add(new Sphere(Vector(0,1.9,-3), 0.5), Vector(0,0,0), 10000, Material::diffuse); // Light
+
+  const auto fileName = args.at("outfile").as<std::string>();
+  const auto width = args.at("width").as<std::uint32_t>();
+  const auto height = args.at("height").as<std::uint32_t>();
+	const auto spp = args.at("samples").as<std::uint32_t>();
+  const auto refractiveIndex = args.at("refractive-index").as<float>();
+
+
+	Vector **pix = new Vector*[width];
+	for(std::uint32_t i = 0; i<width; ++i) {
+		pix[i] = new Vector[height];
+	}
+
+	// correlated Halton-sequence dimensions
+	Halton hal, hal2;
+	hal.number(0, 2);
+	hal2.number(0, 2);
+
+	clock_t start = clock();
+
+	#pragma omp parallel for schedule(dynamic) firstprivate(hal,hal2)
+	for (std::uint32_t col = 0; col < width; ++col) {
+		fprintf(stdout,"\rRendering: %u spp %8.2f%%",spp,(double)col/width*100);
+		for(std::uint32_t row = 0; row < height; ++row) {
+			for(std::uint32_t s = 0; s < spp; ++s) {
+				Vector color;
+				Ray ray;
+				ray.origin = (Vector(0,0,0)); // rays start out from here
+				Vector cam = camcr(col, row, width, height); // construct image plane coordinates
+				cam(0) += RND/700; // anti-aliasing for free
+				cam(1) += RND/700;
+				ray.direction = (cam - ray.origin).normalized(); // point from the origin to the camera plane
+				trace(ray, scene, 0, color, refractiveIndex, hal, hal2);
+				pix[col][row] = pix[col][row] + color / spp; // write the contributions
+			}
+		}
+	}
+
+	FILE *f = fopen(fileName.c_str(), "w");
+	fprintf(f, "P3\n%u %u\n%d\n ", width, height, 255);
+	for (std::uint32_t row=0; row < height; ++row) {
+		for (std::uint32_t col=0; col < width; ++col) {
+			fprintf(f,"%d %d %d ",
+        std::min((int)pix[col][row](0), 255),
+        std::min((int)pix[col][row](1), 255),
+        std::min((int)pix[col][row](2), 255)
+      );
+		}
+		fprintf(f, "\n");
+	}
+	fclose(f);
+	clock_t end = clock();
+	double t = (double)(end-start)/CLOCKS_PER_SEC;
+	printf("\nRender time: %fs.\n",t);
+
   return EXIT_SUCCESS;
 }
