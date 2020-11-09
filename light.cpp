@@ -14,7 +14,7 @@
 namespace light {
 
 using Vector = Eigen::Vector3f;
-static float eps = 1e-6; //std::numeric_limits<float>::epsilon();
+static float eps = std::numeric_limits<float>::epsilon();
 
 struct Ray {
 	Vector origin;
@@ -137,9 +137,9 @@ Vector camcr(float x, float y, std::uint32_t width, std::uint32_t height) {
 				-1.0);
 }
 
-Vector hemisphere(double u1, double u2) {
-	const double r = sqrt(1.0-u1*u1);
-	const double phi = 2 * M_PI * u2;
+Vector hemisphere(float u1, float u2) {
+	const float r = sqrt(1.0-u1*u1);
+	const float phi = 2 * M_PI * u2;
 	return Vector(cos(phi)*r, sin(phi)*r, u1);
 }
 
@@ -171,12 +171,20 @@ struct Halton {
 std::tuple<Vector, Vector, Vector>
 orthonormalSystem(const Vector& v1) {
     Vector v2;
-    if (std::abs(v1(0)) > std::abs(v1(1))) {
-		  float invLen = 1.f / std::sqrt(v1(0) * v1(0) + v1(2) * v1(2));
-		  v2 = Vector(-v1(2) * invLen, 0.f, v1(0) * invLen);
+		Vector v1abs = v1.array().abs();
+		Vector v1sq = v1.cwiseProduct(v1);
+		const auto v1x = v1(0);
+		const auto v1y = v1(1);
+		const auto v1z = v1(2);
+		const auto v1x2 = v1sq(0);
+		const auto v1y2 = v1sq(1);
+		const auto v1z2 = v1sq(2);
+    if (v1abs(0) > v1abs(1)) {
+		  float invLen = 1.f / std::sqrt(v1x2 + v1z2);
+		  v2 = Vector(-v1z * invLen, 0.f, v1x * invLen);
     } else {
-		  float invLen = 1.0f / std::sqrt(v1(1) * v1(1) + v1(2) * v1(2));
-		  v2 = Vector(0.f, v1(2) * invLen, -v1(1) * invLen);
+		  float invLen = 1.0f / std::sqrt(v1y2 + v1z2);
+		  v2 = Vector(0.f, v1z * invLen, -v1y * invLen);
     }
     return std::make_tuple(v1, v2, v1.cross(v2));
 }
@@ -190,9 +198,9 @@ std::uniform_real_distribution<float> uniform;
 void trace(Ray &ray, const Scene& scene, int depth, Vector& clr,
            float refractiveIndex, Halton& hal, Halton& hal2) {
 	// Russian roulette: starting at depth 5, each recursive step will stop with a probability of 0.1
-	double rrFactor = 1.0;
+	float rrFactor = 1.0;
 	if (depth >= 5) {
-		const double rrStopProbability = 0.1;
+		const float rrStopProbability = 0.1;
 		if (RND2 <= rrStopProbability) {
 			return;
 		}
@@ -215,15 +223,11 @@ void trace(Ray &ray, const Scene& scene, int depth, Vector& clr,
 	if(intersection.object->type == Material::diffuse) {
 		Vector rotX, rotY;
 		std::tie(std::ignore, rotX, rotY) = orthonormalSystem(N);
-		Vector sampledDir = hemisphere(RND2,RND2);
-		Vector rotatedDir(
-      Vector(rotX(0), rotY(0), N(0)).dot(sampledDir),
-		  Vector(rotX(1), rotY(1), N(1)).dot(sampledDir),
-		  Vector(rotX(2), rotY(2), N(2)).dot(sampledDir)
-    );
-		ray.direction = rotatedDir;	// already normalized
-		double cost=ray.direction.dot(N);
-		Vector tmp;
+		Vector sampledDir = hemisphere(RND2, RND2);
+		Eigen::Matrix3f m; m << rotX, rotY, N;
+		ray.direction = m * sampledDir;	// already normalized
+		float cost = ray.direction.dot(N);
+		Vector tmp(0, 0, 0);
 		trace(ray, scene, depth + 1, tmp, refractiveIndex, hal, hal2);
 		clr = clr + (tmp.cwiseProduct(intersection.object->colour)) * cost * 0.1 * rrFactor;
 	}
@@ -245,11 +249,11 @@ void trace(Ray &ray, const Scene& scene, int depth, Vector& clr,
 		auto n = refractiveIndex;
 		auto R0 = (1.0-n)/(1.0+n);
 		R0 = R0*R0;
-		if(N.dot(ray.direction)>0) { // we're inside the medium
-			N = N*-1;
+		if(N.dot(ray.direction) > 0) { // we're inside the medium
+			N = -N;
 			n = 1/n;
 		}
-		n=1/n;
+		n = 1 / n;
 		auto cost1 = (N.dot(ray.direction))*-1; // cosine of theta_1
 		auto cost2 = 1.0 - n*n*(1.0-cost1*cost1); // cosine of theta_2
 		auto Rprob = R0 + (1.0-R0) * powf(1.0 - cost1, 5.0); // Schlick-approximation
@@ -258,7 +262,7 @@ void trace(Ray &ray, const Scene& scene, int depth, Vector& clr,
 		} else { // reflection direction
 			ray.direction = (ray.direction+N*(cost1*2)).normalized();
 		}
-		Vector tmp;
+		Vector tmp(0, 0, 0);
 		trace(ray, scene, depth + 1, tmp, refractiveIndex, hal, hal2);
 		clr = clr + tmp * 1.15 * rrFactor;
 	}
@@ -305,29 +309,36 @@ getArgs(int argc, char** argv) {
 int main(int argc, char** argv) {
   const auto args = getArgs(argc, argv);
 
+	light::Vector x(1, 1, 1);
+	light::Vector y(2, 2, 2);
+	light::Vector z(3, 3, 3);
+	Eigen::Matrix3f m;
+	m << x, y, z;
+	std::cerr << m << "\n";
+
   std::cerr << "light epsilon: " << light::eps << "\n";
 
   using namespace light;
   Scene scene;
-	auto add = [&scene](Object* s, Vector cl, double emission, Material type) {
+	auto add = [&scene](Object* s, Vector cl, float emission, Material type) {
 			s->setMaterial(cl, emission, type);
 			scene.add(s);
 	};
 
 	// // Radius, position, color, emission, type (1=diff, 2=spec, 3=refr) for spheres
-	//add(new Sphere(Vector(-0.75,-1.45,-4.4), 1.05), Vector(4,8,4), 0, Material::specular); // Middle sphere
-	// add(new Sphere(Vector(2.0,-2.05,-3.7), 0.5), Vector(10,10,1), 0, Material::refractive); // Right sphere
-	// add(new Sphere(Vector(-1.75,-1.95,-3.1), 0.6), Vector(4,4,12), 0, Material::diffuse); // Left sphere
-	// // Position, normal, color, emission, type for planes
+	add(new Sphere(Vector(-0.75,-1.45,-4.4), 1.05), Vector(4,8,4), 0, Material::specular); // Middle sphere
+	add(new Sphere(Vector(2.0,-2.05,-3.7), 0.5), Vector(10,10,1), 0, Material::refractive); // Right sphere
+	add(new Sphere(Vector(-1.75,-1.95,-3.1), 0.6), Vector(4,4,12), 0, Material::diffuse); // Left sphere
+	// Position, normal, color, emission, type for planes
   const auto X = Vector(1, 0, 0);
   const auto Y = Vector(0, 1, 0);
   const auto Z = Vector(0, 0, 1);
 	add(new Plane(Y, 2.5), Vector(6,6,6), 0, Material::diffuse); // Bottom plane
 	add(new Plane(Z, 5.5), Vector(6,6,6), 0, Material::diffuse); // Back plane
 	add(new Plane(X, 2.75), Vector(10,2,2), 0, Material::diffuse); // Left plane
-	// add(new Plane(-X, 2.75), Vector(2,10,2), 0, Material::diffuse); // Right plane
-	// add(new Plane(-Y, 3.0), Vector(6,6,6), 0, Material::diffuse); // Ceiling plane
-	// add(new Plane(-Z, 0.5), Vector(6,6,6), 0, Material::diffuse); // Front plane
+	add(new Plane(-X, 2.75), Vector(2,10,2), 0, Material::diffuse); // Right plane
+	add(new Plane(-Y, 3.0), Vector(6,6,6), 0, Material::diffuse); // Ceiling plane
+	add(new Plane(-Z, 0.5), Vector(6,6,6), 0, Material::diffuse); // Front plane
 	add(new Sphere(Vector(0,1.9,-3), 0.5), Vector(0,0,0), 10000, Material::diffuse); // Light
 
   const auto fileName = args.at("outfile").as<std::string>();
@@ -351,16 +362,16 @@ int main(int argc, char** argv) {
 
 	#pragma omp parallel for schedule(dynamic) firstprivate(hal,hal2)
 	for (std::uint32_t col = 0; col < width; ++col) {
-		fprintf(stdout,"\rRendering: %u spp %8.2f%%",spp,(double)col/width*100);
+		fprintf(stdout, "\rRendering: %u spp %8.2f%%", spp, (float)col/width*100);
 		for(std::uint32_t row = 0; row < height; ++row) {
 			for(std::uint32_t s = 0; s < spp; ++s) {
-				Vector color;
 				Ray ray;
 				ray.origin = (Vector(0,0,0)); // rays start out from here
 				Vector cam = camcr(col, row, width, height); // construct image plane coordinates
 				cam(0) += RND/700; // anti-aliasing for free
 				cam(1) += RND/700;
 				ray.direction = (cam - ray.origin).normalized(); // point from the origin to the camera plane
+				Vector color(0.f, 0.f, 0.f);
 				trace(ray, scene, 0, color, refractiveIndex, hal, hal2);
 				pix[col][row] = pix[col][row] + color / spp; // write the contributions
 			}
@@ -381,7 +392,7 @@ int main(int argc, char** argv) {
 	}
 	fclose(f);
 	clock_t end = clock();
-	double t = (double)(end-start)/CLOCKS_PER_SEC;
+	float t = (float)(end-start)/CLOCKS_PER_SEC;
 	printf("\nRender time: %fs.\n",t);
 
   return EXIT_SUCCESS;
