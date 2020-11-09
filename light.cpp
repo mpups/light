@@ -195,20 +195,21 @@ std::uniform_real_distribution<float> uniform;
 #define RND (2.f*uniform(mersenneTwister) - 1.f)
 #define RND2 (uniform(mersenneTwister))
 
-void trace(Ray &ray, const Scene& scene, int depth, Vector& clr,
-           float refractiveIndex, Halton& hal, Halton& hal2) {
+Vector trace(Ray &ray, const Scene& scene, int depth, float refractiveIndex, Halton& hal, Halton& hal2) {
+	Vector clr(0, 0, 0);
+
 	// Russian roulette: starting at depth 5, each recursive step will stop with a probability of 0.1
 	float rrFactor = 1.0;
 	if (depth >= 5) {
 		const float rrStopProbability = 0.1;
 		if (RND2 <= rrStopProbability) {
-			return;
+			return clr;
 		}
 		rrFactor = 1.0 / (1.0 - rrStopProbability);
 	}
 
 	Intersection intersection = scene.intersect(ray);
-	if (!intersection) return;
+	if (!intersection) return clr;
 
 	// Travel the ray to the hit point where the closest object lies and compute the surface normal there.
 	Vector hp = ray.origin + ray.direction * intersection.t;
@@ -217,7 +218,7 @@ void trace(Ray &ray, const Scene& scene, int depth, Vector& clr,
 	// Add the emission, the L_e(x,w) part of the rendering equation, but scale it with the Russian Roulette
 	// probability weight.
 	const auto emission = intersection.object->emission;
-	clr = clr + Vector(emission, emission, emission) * rrFactor;
+	clr += Vector(emission, emission, emission) * rrFactor;
 
 	// Diffuse BRDF - choose an outgoing direction with hemisphere sampling.
 	if(intersection.object->type == Material::diffuse) {
@@ -227,9 +228,8 @@ void trace(Ray &ray, const Scene& scene, int depth, Vector& clr,
 		Eigen::Matrix3f m; m << rotX, rotY, N;
 		ray.direction = m * sampledDir;	// already normalized
 		float cost = ray.direction.dot(N);
-		Vector tmp(0, 0, 0);
-		trace(ray, scene, depth + 1, tmp, refractiveIndex, hal, hal2);
-		clr = clr + (tmp.cwiseProduct(intersection.object->colour)) * cost * 0.1 * rrFactor;
+		auto result = trace(ray, scene, depth + 1, refractiveIndex, hal, hal2);
+		clr += (result.cwiseProduct(intersection.object->colour)) * cost * 0.1 * rrFactor;
 	}
 
 	// Specular BRDF - this is a singularity in the rendering equation that follows
@@ -238,9 +238,8 @@ void trace(Ray &ray, const Scene& scene, int depth, Vector& clr,
 	if(intersection.object->type == Material::specular) {
 		auto cost = ray.direction.dot(N);
 		ray.direction = (ray.direction - N*(cost*2)).normalized();
-		Vector tmp = Vector(0, 0, 0);
-		trace(ray, scene, depth + 1, tmp, refractiveIndex, hal, hal2);
-		clr = clr + tmp * rrFactor;
+		auto result = trace(ray, scene, depth + 1, refractiveIndex, hal, hal2);
+		clr += result * rrFactor;
 	}
 
 	// Glass/refractive BRDF - we use the vector version of Snell's law and Fresnel's law
@@ -251,7 +250,7 @@ void trace(Ray &ray, const Scene& scene, int depth, Vector& clr,
 		R0 = R0*R0;
 		if(N.dot(ray.direction) > 0) { // we're inside the medium
 			N = -N;
-			n = 1/n;
+			n = 1 / n;
 		}
 		n = 1 / n;
 		auto cost1 = (N.dot(ray.direction))*-1; // cosine of theta_1
@@ -262,10 +261,12 @@ void trace(Ray &ray, const Scene& scene, int depth, Vector& clr,
 		} else { // reflection direction
 			ray.direction = (ray.direction+N*(cost1*2)).normalized();
 		}
-		Vector tmp(0, 0, 0);
-		trace(ray, scene, depth + 1, tmp, refractiveIndex, hal, hal2);
-		clr = clr + tmp * 1.15 * rrFactor;
+
+		auto result = trace(ray, scene, depth + 1, refractiveIndex, hal, hal2);
+		clr += result * (1.15 * rrFactor);
 	}
+
+	return clr;
 }
 
 } // end namespace light
@@ -308,14 +309,6 @@ getArgs(int argc, char** argv) {
 
 int main(int argc, char** argv) {
   const auto args = getArgs(argc, argv);
-
-	light::Vector x(1, 1, 1);
-	light::Vector y(2, 2, 2);
-	light::Vector z(3, 3, 3);
-	Eigen::Matrix3f m;
-	m << x, y, z;
-	std::cerr << m << "\n";
-
   std::cerr << "light epsilon: " << light::eps << "\n";
 
   using namespace light;
@@ -347,7 +340,6 @@ int main(int argc, char** argv) {
 	const auto spp = args.at("samples").as<std::uint32_t>();
   const auto refractiveIndex = args.at("refractive-index").as<float>();
 
-
 	Vector **pix = new Vector*[width];
 	for(std::uint32_t i = 0; i<width; ++i) {
 		pix[i] = new Vector[height];
@@ -365,14 +357,11 @@ int main(int argc, char** argv) {
 		fprintf(stdout, "\rRendering: %u spp %8.2f%%", spp, (float)col/width*100);
 		for(std::uint32_t row = 0; row < height; ++row) {
 			for(std::uint32_t s = 0; s < spp; ++s) {
-				Ray ray;
-				ray.origin = (Vector(0,0,0)); // rays start out from here
 				Vector cam = camcr(col, row, width, height); // construct image plane coordinates
-				cam(0) += RND/700; // anti-aliasing for free
-				cam(1) += RND/700;
-				ray.direction = (cam - ray.origin).normalized(); // point from the origin to the camera plane
-				Vector color(0.f, 0.f, 0.f);
-				trace(ray, scene, 0, color, refractiveIndex, hal, hal2);
+				Vector aaNoise(RND/100, RND/100, 0.f);
+				cam += aaNoise;
+				Ray ray(Vector(0, 0, 0), cam);
+				auto color = trace(ray, scene, 0, refractiveIndex, hal, hal2);
 				pix[col][row] = pix[col][row] + color / spp; // write the contributions
 			}
 		}
