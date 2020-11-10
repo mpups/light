@@ -75,15 +75,13 @@ struct Sphere : public Object {
   virtual ~Sphere() {}
 
 	float intersect(const Ray& ray) const override {
-		auto b = (2.f * (ray.origin - centre)).dot(ray.direction);
+		Vector L = ray.origin - centre;
+		auto b = 2.f * L.dot(ray.direction);
     auto r2 = radius * radius;
-		auto c = (ray.origin - centre).squaredNorm() - r2;
+		auto c = L.squaredNorm() - r2;
 		auto disc = b*b - 4*c;
-		if (disc < 0.f) {
-      return 0.f;
-    } else {
-      disc = sqrtf(disc);
-    }
+		if (disc < 0.f) { return 0.f; }
+    disc = sqrtf(disc);
 		auto sol1 = -b + disc;
 		auto sol2 = -b - disc;
 		return (sol2>eps) ? sol2*.5f : ((sol1>eps) ? sol1*.5f : 0.f);
