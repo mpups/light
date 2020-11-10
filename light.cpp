@@ -68,23 +68,28 @@ struct Plane : public Object {
 };
 
 struct Sphere : public Object {
-	Vector centre;
-	float radius;
+	const Vector centre;
+	const float radius;
+	const float radius2;
 
-	Sphere(Vector c, float r) : centre(c), radius(r) {}
+	Sphere(Vector c, float r) : centre(c), radius(r), radius2(r*r) {}
   virtual ~Sphere() {}
 
 	float intersect(const Ray& ray) const override {
-		Vector L = ray.origin - centre;
-		auto b = 2.f * L.dot(ray.direction);
-    auto r2 = radius * radius;
-		auto c = L.squaredNorm() - r2;
-		auto disc = b*b - 4*c;
-		if (disc < 0.f) { return 0.f; }
-    disc = sqrtf(disc);
-		auto sol1 = -b + disc;
-		auto sol2 = -b - disc;
-		return (sol2>eps) ? sol2*.5f : ((sol1>eps) ? sol1*.5f : 0.f);
+		Vector L = centre - ray.origin;
+		auto tca = L.dot(ray.direction);
+		if (tca < 0.f) { return 0.f; }
+		auto d2 = L.squaredNorm() - (tca * tca);
+		if (d2 > radius2) { return 0.f; }
+		auto thc = sqrtf(radius2 - d2);
+		auto t0 = tca - thc;
+		auto t1 = tca + thc;
+		if (t0 > t1) { std::swap(t0, t1); }
+		if (t0 < 0) {
+				t0 = t1;
+				if (t0 < 0) { return 0.f; }
+		}
+		return t0;
 	}
 
 	Vector normal(const Vector& point) const {
