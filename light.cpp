@@ -1,4 +1,5 @@
 #include <iostream>
+#include <iomanip>
 #include <fstream>
 #include <cstdlib>
 #include <string>
@@ -7,9 +8,12 @@
 #include <cmath>
 #include <tuple>
 #include <random>
+#include <chrono>
 
 #include <boost/program_options.hpp>
 #include <Eigen/Dense>
+#include <opencv2/imgcodecs.hpp>
+#include <opencv2/highgui.hpp>
 
 namespace light {
 
@@ -343,49 +347,53 @@ int main(int argc, char** argv) {
   const auto refractiveIndex = args.at("refractive-index").as<float>();
 	const auto antiAliasingScale = args.at("aa-noise-scale").as<float>();
 
-	Vector **pix = new Vector*[width];
-	for(std::uint32_t i = 0; i<width; ++i) {
-		pix[i] = new Vector[height];
+	std::vector<std::vector<Vector>> pixels(height);
+	for(auto &row: pixels) {
+		row.resize(width, Vector(0, 0, 0));
 	}
+
+	cv::Mat image(height, width, CV_8UC3);
 
 	// correlated Halton-sequence dimensions
 	Halton hal, hal2;
 	hal.number(0, 2);
 	hal2.number(0, 2);
 
-	clock_t start = clock();
+	auto startTime = std::chrono::steady_clock::now();
 
-	#pragma omp parallel for schedule(dynamic) firstprivate(hal,hal2)
-	for (std::uint32_t col = 0; col < width; ++col) {
-		fprintf(stdout, "\rRendering: %u spp %8.2f%%", spp, (float)col/width*100);
-		for(std::uint32_t row = 0; row < height; ++row) {
-			for(std::uint32_t s = 0; s < spp; ++s) {
+	for(std::uint32_t s = 0; s < spp; ++s) {
+		std::cerr << std::setprecision(4) << "\rRendering: " << s*100.f/spp << "%";
+		#pragma omp parallel for schedule(dynamic) firstprivate(hal,hal2)
+		for (std::uint32_t col = 0; col < width; ++col) {
+			for(std::uint32_t row = 0; row < height; ++row) {
 				Vector cam = camcr(col, row, width, height); // construct image plane coordinates
 				Vector aaNoise(RND, RND, 0.f);
 				cam += aaNoise * antiAliasingScale;
 				Ray ray(Vector(0, 0, 0), cam);
 				auto color = trace(ray, scene, 0, refractiveIndex, hal, hal2);
-				pix[col][row] = pix[col][row] + color / spp; // write the contributions
+				pixels[row][col] = pixels[row][col] + color / spp; // write the contributions
 			}
+		}
+
+		// Save image at regular intervals and when done:
+		if (s == spp || s % 8 == 0) {
+			for (std::uint32_t col = 0; col < width; ++col) {
+				for(std::uint32_t row = 0; row < height; ++row) {
+					const Vector p = pixels[row][col] * (spp/(float)s);
+					const auto value = cv::Vec3b(
+						std::min(p(2), 255.f),
+						std::min(p(1), 255.f),
+						std::min(p(0), 255.f)
+					);
+					image.at<cv::Vec3b>(row, col) = value;
+				}
+			}
+			cv::imwrite(fileName, image);
 		}
 	}
 
-	FILE *f = fopen(fileName.c_str(), "w");
-	fprintf(f, "P3\n%u %u\n%d\n ", width, height, 255);
-	for (std::uint32_t row=0; row < height; ++row) {
-		for (std::uint32_t col=0; col < width; ++col) {
-			fprintf(f,"%d %d %d ",
-        std::min((int)pix[col][row](0), 255),
-        std::min((int)pix[col][row](1), 255),
-        std::min((int)pix[col][row](2), 255)
-      );
-		}
-		fprintf(f, "\n");
-	}
-	fclose(f);
-	clock_t end = clock();
-	float t = (float)(end-start)/CLOCKS_PER_SEC;
-	printf("\nRender time: %fs.\n",t);
+	std::chrono::duration<double> seconds = std::chrono::steady_clock::now() - startTime;
+	std::cout << "\nRender time: " << seconds.count() << " seconds\n";
 
   return EXIT_SUCCESS;
 }
