@@ -361,6 +361,8 @@ int main(int argc, char** argv) {
 
 	auto startTime = std::chrono::steady_clock::now();
 
+	cv::namedWindow(fileName);
+
 	for(std::uint32_t s = 0; s < spp; ++s) {
 		std::cerr << std::setprecision(4) << "\rRendering: " << s*100.f/spp << "%";
 		#pragma omp parallel for schedule(dynamic) firstprivate(hal,hal2)
@@ -375,7 +377,7 @@ int main(int argc, char** argv) {
 			}
 		}
 
-		// Save image at regular intervals and when done:
+		// Save/display image at regular intervals and when done:
 		if (s == spp || s % 8 == 0) {
 			for (std::uint32_t col = 0; col < width; ++col) {
 				for(std::uint32_t row = 0; row < height; ++row) {
@@ -388,7 +390,10 @@ int main(int argc, char** argv) {
 					image.at<cv::Vec3b>(row, col) = value;
 				}
 			}
+
 			cv::imwrite(fileName, image);
+			cv::imshow(fileName, image);
+			cv::waitKey(1);
 		}
 	}
 
