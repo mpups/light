@@ -353,6 +353,7 @@ int main(int argc, char** argv) {
 	}
 
 	cv::Mat image(height, width, CV_8UC3);
+	image = cv::Vec3b(0, 0, 0);
 
 	// correlated Halton-sequence dimensions
 	Halton hal, hal2;
@@ -360,13 +361,21 @@ int main(int argc, char** argv) {
 	hal2.number(0, 2);
 
 	auto startTime = std::chrono::steady_clock::now();
-
 	cv::namedWindow(fileName);
+  std::uint64_t samples = 0u;
 
 	for(std::uint32_t s = 0; s < spp; ++s) {
-		std::cerr << std::setprecision(4) << "\rRendering: " << s*100.f/spp << "%";
+		double elapsed_secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - startTime).count();
+		std::cerr << std::setprecision(3) << "\rRendering: " << s*100.f/spp
+							<< "% samples: " << samples
+							<< " elapsed seconds: " << elapsed_secs
+							<< " samples/sec: " << samples / elapsed_secs << "\t";
 		#pragma omp parallel for schedule(dynamic) firstprivate(hal,hal2)
 		for (std::uint32_t col = 0; col < width; ++col) {
+			// We need to service the window's event loop regularly:
+			#pragma omp critical
+			cv::waitKey(1);
+
 			for(std::uint32_t row = 0; row < height; ++row) {
 				Vector cam = camcr(col, row, width, height); // construct image plane coordinates
 				Vector aaNoise(RND, RND, 0.f);
@@ -376,6 +385,8 @@ int main(int argc, char** argv) {
 				pixels[row][col] = pixels[row][col] + color / spp; // write the contributions
 			}
 		}
+
+		samples += width * height;
 
 		// Save/display image at regular intervals and when done:
 		if (s == spp || s % 8 == 0) {
@@ -393,7 +404,7 @@ int main(int argc, char** argv) {
 
 			cv::imwrite(fileName, image);
 			cv::imshow(fileName, image);
-			cv::waitKey(1);
+
 		}
 	}
 
