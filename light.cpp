@@ -19,7 +19,43 @@ namespace light {
 
 static float eps = std::numeric_limits<float>::epsilon();
 
+#ifdef USE_EIGEN
 using Vector = Eigen::Vector3f;
+#else
+struct Vector {
+	float x, y, z;
+	Vector(float x0, float y0, float z0) : x(x0), y(y0), z(z0) {}
+	Vector operator + (const Vector &b) const {
+		return Vector(x + b.x, y + b.y, z + b.z);
+	}
+	Vector& operator += (const Vector &b) {
+		x += b.x;
+		y += b.y;
+		z += b.z;
+		return *this;
+	}
+	Vector operator - (const Vector &b) const {
+		return Vector(x-b.x,y-b.y,z-b.z);
+	}
+	Vector operator - () const { return Vector(-x, -y, -z); }
+	Vector operator * (float b) const { return Vector(x*b, y*b, z*b); }
+	Vector operator / (float b) const { return Vector(x/b, y/b, z/b); }
+	Vector cwiseProduct(const Vector &b) const {
+		return Vector(x*b.x, y*b.y, z*b.z);
+	}
+  Vector normalized() { return *this * (1.f/sqrt(x*x + y*y + z*z)); }
+	float squaredNorm() { return x*x + y*y + z*z; }
+	float dot(const Vector &b) const { return x*b.x + y*b.y + z*b.z; }
+	Vector cross(const Vector &b) const {
+		return Vector(y*b.z - z*b.y, z*b.x - x*b.z, x*b.y - y*b.x);
+	}
+	const float& operator () (size_t i) const { return i==0 ? x : (i==1 ? y : z); }
+	Vector abs() const {
+		return Vector(std::abs(x), std::abs(y), std::abs(z));
+	}
+	const Vector& array() const { return *this; } // For Eigen compatibility only
+};
+#endif
 
 struct Ray {
 	Vector origin;
@@ -178,7 +214,7 @@ struct Halton {
 
 std::tuple<Vector, Vector, Vector>
 orthonormalSystem(const Vector& v1) {
-    Vector v2;
+    Vector v2(0, 0, 0);
 		Vector v1abs = v1.array().abs();
 		Vector v1sq = v1.cwiseProduct(v1);
 		const auto v1x = v1(0);
@@ -236,10 +272,21 @@ Vector trace(Ray &ray, const Scene& scene, int depth, float refractiveIndex, Hal
 
 	// Diffuse BRDF - choose an outgoing direction with hemisphere sampling.
 	if(intersection.object->type == Material::diffuse) {
-		auto basis = orthonormalSystem(N);
+		Vector rotX(0, 0, 0), rotY(0, 0, 0);
+		std::tie(rotX, rotY, std::ignore) = orthonormalSystem(N);
+#ifdef USE_EIGEN
 		Eigen::Matrix3f R;
-		R << std::get<0>(basis), std::get<1>(basis), std::get<2>(basis);
+		R << rotX, rotY, N;
 		ray.direction = R * hemisphere(rnd2(), rnd2());	// Rotation applied to normalised vector is still unit.
+#else
+		const auto sampledDir = hemisphere(rnd2(), rnd2());
+		ray.direction = Vector(
+			Vector(rotX.x, rotY.x, N.x).dot(sampledDir),
+			Vector(rotX.y, rotY.y, N.y).dot(sampledDir),
+			Vector(rotX.z, rotY.z, N.z).dot(sampledDir)
+		);
+#endif
+
 		float cost = ray.direction.dot(N);
 		auto result = trace(ray, scene, depth + 1, refractiveIndex, hal, hal2);
 		clr += (result.cwiseProduct(intersection.object->colour)) * cost * 0.1 * rrFactor;
