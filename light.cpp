@@ -199,8 +199,14 @@ Eigen::Matrix3f orthonormalSystem(const Vector& v1) {
 std::random_device rd;
 std::mt19937 mersenneTwister(rd());
 std::uniform_real_distribution<float> uniform;
-#define RND (2.f*uniform(mersenneTwister) - 1.f)
-#define RND2 (uniform(mersenneTwister))
+
+auto rnd = [&] () {
+	return 2.f*uniform(mersenneTwister) - 1.f;
+};
+
+auto rnd2 = [&] () {
+	return uniform(mersenneTwister);
+};
 
 Vector trace(Ray &ray, const Scene& scene, int depth, float refractiveIndex, Halton& hal, Halton& hal2) {
 	Vector clr(0, 0, 0);
@@ -209,7 +215,7 @@ Vector trace(Ray &ray, const Scene& scene, int depth, float refractiveIndex, Hal
 	float rrFactor = 1.0;
 	if (depth >= 5) {
 		const float rrStopProbability = 0.1;
-		if (RND2 <= rrStopProbability) {
+		if (rnd2() <= rrStopProbability) {
 			return clr;
 		}
 		rrFactor = 1.0 / (1.0 - rrStopProbability);
@@ -230,7 +236,7 @@ Vector trace(Ray &ray, const Scene& scene, int depth, float refractiveIndex, Hal
 	// Diffuse BRDF - choose an outgoing direction with hemisphere sampling.
 	if(intersection.object->type == Material::diffuse) {
 		const Eigen::Matrix3f R = orthonormalSystem(N);
-		ray.direction = R * hemisphere(RND2, RND2);	// Rotation applied to normalised vector is still unit.
+		ray.direction = R * hemisphere(rnd2(), rnd2());	// Rotation applied to normalised vector is still unit.
 		float cost = ray.direction.dot(N);
 		auto result = trace(ray, scene, depth + 1, refractiveIndex, hal, hal2);
 		clr += (result.cwiseProduct(intersection.object->colour)) * cost * 0.1 * rrFactor;
@@ -260,7 +266,7 @@ Vector trace(Ray &ray, const Scene& scene, int depth, float refractiveIndex, Hal
 		auto cost1 = (N.dot(ray.direction))*-1; // cosine of theta_1
 		auto cost2 = 1.0 - n*n*(1.0-cost1*cost1); // cosine of theta_2
 		auto Rprob = R0 + (1.0-R0) * powf(1.0 - cost1, 5.0); // Schlick-approximation
-		if (cost2 > 0 && RND2 > Rprob) { // refraction direction
+		if (cost2 > 0 && rnd2() > Rprob) { // refraction direction
 			ray.direction = ((ray.direction*n)+(N*(n*cost1-sqrt(cost2)))).normalized();
 		} else { // reflection direction
 			ray.direction = (ray.direction+N*(cost1*2)).normalized();
@@ -378,7 +384,7 @@ int main(int argc, char** argv) {
 		for (std::uint32_t col = 0; col < width; ++col) {
 			for(std::uint32_t row = 0; row < height; ++row) {
 				Vector cam = camcr(col, row, width, height); // construct image plane coordinates
-				Vector aaNoise(RND, RND, 0.f);
+				Vector aaNoise(rnd(), rnd(), 0.f);
 				cam += aaNoise * antiAliasingScale;
 				Ray ray(Vector(0, 0, 0), cam);
 				auto color = trace(ray, scene, 0, refractiveIndex, hal, hal2);
