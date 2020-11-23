@@ -287,6 +287,7 @@ getArgs(int argc, char** argv) {
     ("samples,s", po::value<std::uint32_t>()->default_value(32), "Samples per pixel.")
     ("refractive-index,n", po::value<float>()->default_value(1.5), "Refractive index.")
 		("aa-noise-scale,a", po::value<float>()->default_value(1.0/700), "Scale for pixel space anti-aliasing noise.")
+		("no-gui", "Disable display of render window.")
   ;
 
   po::variables_map vars;
@@ -346,6 +347,7 @@ int main(int argc, char** argv) {
 	const auto spp = args.at("samples").as<std::uint32_t>();
   const auto refractiveIndex = args.at("refractive-index").as<float>();
 	const auto antiAliasingScale = args.at("aa-noise-scale").as<float>();
+	const auto gui = !args.count("no-gui");
 
 	std::vector<std::vector<Vector>> pixels(height);
 	for(auto &row: pixels) {
@@ -361,8 +363,10 @@ int main(int argc, char** argv) {
 	hal2.number(0, 2);
 
 	auto startTime = std::chrono::steady_clock::now();
-	cv::namedWindow(fileName);
   std::uint64_t samples = 0u;
+	if (gui) {
+		cv::namedWindow(fileName);
+	}
 
 	for(std::uint32_t s = 0; s < spp; ++s) {
 		double elapsed_secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - startTime).count();
@@ -372,10 +376,6 @@ int main(int argc, char** argv) {
 							<< " samples/sec: " << samples / elapsed_secs << "\t";
 		#pragma omp parallel for schedule(dynamic) firstprivate(hal,hal2)
 		for (std::uint32_t col = 0; col < width; ++col) {
-			// We need to service the window's event loop regularly:
-			#pragma omp critical
-			cv::waitKey(1);
-
 			for(std::uint32_t row = 0; row < height; ++row) {
 				Vector cam = camcr(col, row, width, height); // construct image plane coordinates
 				Vector aaNoise(RND, RND, 0.f);
@@ -383,6 +383,12 @@ int main(int argc, char** argv) {
 				Ray ray(Vector(0, 0, 0), cam);
 				auto color = trace(ray, scene, 0, refractiveIndex, hal, hal2);
 				pixels[row][col] = pixels[row][col] + color / spp; // write the contributions
+			}
+
+			if (gui && col % 20 == 0) {
+			  // We need to service the window's event loop regularly:
+				#pragma omp critical
+				cv::waitKey(1);
 			}
 		}
 
@@ -403,7 +409,9 @@ int main(int argc, char** argv) {
 			}
 
 			cv::imwrite(fileName, image);
-			cv::imshow(fileName, image);
+			if (gui) {
+				cv::imshow(fileName, image);
+			}
 
 		}
 	}
