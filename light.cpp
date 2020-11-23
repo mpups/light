@@ -17,8 +17,9 @@
 
 namespace light {
 
-using Vector = Eigen::Vector3f;
 static float eps = std::numeric_limits<float>::epsilon();
+
+using Vector = Eigen::Vector3f;
 
 struct Ray {
 	Vector origin;
@@ -175,7 +176,8 @@ struct Halton {
 	float get() { return value; }
 };
 
-Eigen::Matrix3f orthonormalSystem(const Vector& v1) {
+std::tuple<Vector, Vector, Vector>
+orthonormalSystem(const Vector& v1) {
     Vector v2;
 		Vector v1abs = v1.array().abs();
 		Vector v1sq = v1.cwiseProduct(v1);
@@ -192,8 +194,7 @@ Eigen::Matrix3f orthonormalSystem(const Vector& v1) {
 		  float invLen = 1.0f / std::sqrt(v1y2 + v1z2);
 		  v2 = Vector(0.f, v1z * invLen, -v1y * invLen);
     }
-		Eigen::Matrix3f m; m << v2, v1.cross(v2), v1;
-    return m;
+		return std::make_tuple(v2, v1.cross(v2), v1);
 }
 
 std::random_device rd;
@@ -235,7 +236,9 @@ Vector trace(Ray &ray, const Scene& scene, int depth, float refractiveIndex, Hal
 
 	// Diffuse BRDF - choose an outgoing direction with hemisphere sampling.
 	if(intersection.object->type == Material::diffuse) {
-		const Eigen::Matrix3f R = orthonormalSystem(N);
+		auto basis = orthonormalSystem(N);
+		Eigen::Matrix3f R;
+		R << std::get<0>(basis), std::get<1>(basis), std::get<2>(basis);
 		ray.direction = R * hemisphere(rnd2(), rnd2());	// Rotation applied to normalised vector is still unit.
 		float cost = ray.direction.dot(N);
 		auto result = trace(ray, scene, depth + 1, refractiveIndex, hal, hal2);
