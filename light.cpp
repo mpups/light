@@ -451,7 +451,7 @@ int main(int argc, char** argv) {
 		samples += width * height;
 
 		// Save/display image at regular intervals and when done:
-		if (s == spp || s % 8 == 0) {
+		if (s == spp - 1 || s % 16 == 0) {
 			for (std::uint32_t col = 0; col < width; ++col) {
 				for(std::uint32_t row = 0; row < height; ++row) {
 					const Vector p = pixels[row][col] * (spp/(float)s);
