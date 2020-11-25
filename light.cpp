@@ -3,11 +3,12 @@
 #include <fstream>
 #include <cstdlib>
 #include <string>
+#include <vector>
+#include <array>
 #include <limits>
 #include <memory>
 #include <cmath>
 #include <tuple>
-#include <random>
 #include <chrono>
 
 #include <boost/program_options.hpp>
@@ -233,16 +234,36 @@ orthonormalSystem(const Vector& v1) {
 		return std::make_tuple(v2, v1.cross(v2), v1);
 }
 
-std::random_device rd;
-std::mt19937 mersenneTwister(rd());
-std::uniform_real_distribution<float> uniform;
+// Use public domain xoroshiro128** PRNG implementation as it is
+// faster than Mersenne twister: http://prng.di.unimi.it/xoroshiro128starstar.c
+using XoshiroState = std::array<uint64_t, 2>;
+XoshiroState state = {1654, 4};
+inline std::uint64_t rotl(std::uint64_t x, int k) { return (x << k) | (x >> (64 - k)); }
 
-auto rnd = [&] () {
-	return 2.f*uniform(mersenneTwister) - 1.f;
+uint64_t xoshiro128ss(XoshiroState &s) {
+	const uint64_t s0 = s[0];
+	uint64_t s1 = s[1];
+	const uint64_t result = rotl(s0 * 5, 7) * 9;
+
+	s1 ^= s0;
+	s[0] = rotl(s0, 24) ^ s1 ^ (s1 << 16); // a, b
+	s[1] = rotl(s1, 37); // c
+
+	return result;
+}
+
+inline double to_double(uint64_t x) {
+	const union { uint64_t i; double d; } u = { .i = UINT64_C(0x3FF) << 52 | x >> 12 };
+	return u.d - 1.0;
+}
+
+// These are not thread safe but do we care if the RNG state is corrupted?
+inline float rnd() {
+	return 2.0*to_double(xoshiro128ss(state)) - 1.0;
 };
 
-auto rnd2 = [&] () {
-	return uniform(mersenneTwister);
+inline float rnd2() {
+	return to_double(xoshiro128ss(state));
 };
 
 Vector trace(Ray &ray, const Scene& scene, int depth, float refractiveIndex, Halton& hal, Halton& hal2) {
