@@ -266,28 +266,34 @@ inline float rnd2() {
 	return to_double(xoshiro128ss(state));
 };
 
+std::pair<bool, float> rouletteFactor(int depth, int maxDepth, float rrStopProbability) {
+	float rrFactor = 1.0;
+	if (depth >= maxDepth) {
+		if (rnd2() <= rrStopProbability) {
+			return std::make_pair(true, rrFactor);
+		}
+		rrFactor = 1.0 / (1.0 - rrStopProbability);
+	}
+	return std::make_pair(false, rrFactor);
+}
+
 Vector trace(Ray &ray, const Scene& scene, int depth, float refractiveIndex, Halton& hal, Halton& hal2) {
 	Vector clr(0, 0, 0);
 
 	// Russian roulette: starting at depth 5, each recursive step will stop with a probability of 0.1
-	float rrFactor = 1.0;
-	if (depth >= 5) {
-		const float rrStopProbability = 0.1;
-		if (rnd2() <= rrStopProbability) {
-			return clr;
-		}
-		rrFactor = 1.0 / (1.0 - rrStopProbability);
-	}
+	bool stop;
+	float rrFactor;
+	std::tie(stop, rrFactor) = rouletteFactor(depth, 5, 0.1);
+	if (stop) { return clr; }
 
 	Intersection intersection = scene.intersect(ray);
-	if (!intersection) return clr;
+	if (!intersection) { return clr; }
 
 	// Travel the ray to the hit point where the closest object lies and compute the surface normal there.
-	Vector hp = ray.origin + ray.direction * intersection.t;
-	Vector N = intersection.object->normal(hp);
-	ray.origin = hp;
-	// Add the emission, the L_e(x,w) part of the rendering equation, but scale it with the Russian Roulette
-	// probability weight.
+	ray.origin += ray.direction * intersection.t;
+	Vector N = intersection.object->normal(ray.origin);
+
+	// Add the emission, the L_e(x,w) part of the rendering equation, but scale it with the Russian Roulette probability weight.
 	const auto emission = intersection.object->emission;
 	clr += Vector(emission, emission, emission) * rrFactor;
 
