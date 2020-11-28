@@ -38,11 +38,11 @@ enum class Material {
 
 struct Object {
 	Vector colour;
-	float emission;
+	Vector emission;
 	Material type;
-  Object() : colour(0.f, 0.f, 0.f), emission(0.f), type(Material::diffuse) {}
+  Object() : colour(0.f, 0.f, 0.f), emission(0.f, 0.f, 0.f), type(Material::diffuse) {}
 
-	void setMaterial(const Vector& c, float e, Material m) {
+	void setMaterial(Vector c, Vector e, Material m) {
     colour = c;
     emission = e;
     type = m;
@@ -253,8 +253,9 @@ std::pair<bool, float> rouletteWeight(float stopProb) {
 	return std::make_pair(false, 1.0 / (1.0 - stopProb));
 }
 
-Vector trace(Ray ray, RayTracerContext& tracer);
+Vector trace(Ray ray, RayTracerContext tracer);
 
+// Diffuse BRDF - choose an outgoing direction with hemisphere sampling.
 Vector diffuseContribution(Ray ray, Vector normal, Intersection& intersection, RayTracerContext& tracer) {
 	Vector rotX, rotY;
 	std::tie(rotX, rotY, std::ignore) = orthonormalSystem(normal);
@@ -277,22 +278,27 @@ Vector diffuseContribution(Ray ray, Vector normal, Intersection& intersection, R
 	return result.cwiseProduct(intersection.object->colour) * cost;
 }
 
+// Specular BRDF - this is a singularity in the rendering equation that follows
+// delta distribution, therefore we handle this case explicitly - one incoming
+// direction -> one outgoing direction, that is, the perfect reflection direction.
 Vector specularContribution(Ray ray, Vector normal, RayTracerContext& tracer) {
 	auto cost = ray.direction.dot(normal);
 	ray.direction = (ray.direction - normal * (cost * 2.f)).normalized();
 	return trace(ray, tracer.next());
 }
 
+// Glass/refractive BRDF - we use the vector version of Snell's law and Fresnel's law
+// to compute the outgoing reflection and refraction directions and probability weights.
 Vector refractiveContribution(Ray ray, Vector normal, RayTracerContext& tracer) {
 	auto n = tracer.refractiveIndex;
 	auto R0 = (1.0-n)/(1.0+n);
 	R0 = R0*R0;
 	if(normal.dot(ray.direction) > 0) { // we're inside the medium
 		normal = -normal;
+	} else {
 		n = 1 / n;
 	}
-	n = 1 / n;
-	auto cost1 = (normal.dot(ray.direction))*-1; // cosine of theta_1
+	auto cost1 = -normal.dot(ray.direction); // cosine of theta_1
 	auto cost2 = 1.0 - n*n*(1.0-cost1*cost1); // cosine of theta_2
 	auto Rprob = R0 + (1.0-R0) * powf(1.0 - cost1, 5.0); // Schlick-approximation
 	if (cost2 > 0 && rnd2() > Rprob) { // refraction direction
@@ -304,10 +310,10 @@ Vector refractiveContribution(Ray ray, Vector normal, RayTracerContext& tracer) 
 	return trace(ray, tracer.next());
 }
 
-Vector trace(Ray ray, RayTracerContext& tracer) {
+Vector trace(Ray ray, RayTracerContext tracer) {
 	Vector clr(0, 0, 0);
 
-	// Russian roulette: starting at depth 5, each recursive step will stop with a probability of 0.1
+	// Russian roulette ray termination:
 	float rrFactor = 1.0;
 	if (tracer.depth >= tracer.rouletteDepth) {
 	  bool stop;
@@ -323,24 +329,13 @@ Vector trace(Ray ray, RayTracerContext& tracer) {
 	Vector N = intersection.object->normal(ray.origin);
 
 	// Add the emission, the L_e(x,w) part of the rendering equation, but scale it with the Russian Roulette probability weight.
-	const auto emission = intersection.object->emission;
-	clr += Vector(emission, emission, emission) * rrFactor;
+	clr += intersection.object->emission * rrFactor;
 
-	// Diffuse BRDF - choose an outgoing direction with hemisphere sampling.
-	if(intersection.object->type == Material::diffuse) {
+	if (intersection.object->type == Material::diffuse) {
 		clr += diffuseContribution(ray, N, intersection, tracer) * (0.1 * rrFactor);
-	}
-
-	// Specular BRDF - this is a singularity in the rendering equation that follows
-	// delta distribution, therefore we handle this case explicitly - one incoming
-	// direction -> one outgoing direction, that is, the perfect reflection direction.
-	if(intersection.object->type == Material::specular) {
+	} else if (intersection.object->type == Material::specular) {
 		clr += specularContribution(ray, N, tracer) * rrFactor;
-	}
-
-	// Glass/refractive BRDF - we use the vector version of Snell's law and Fresnel's law
-	// to compute the outgoing reflection and refraction directions and probability weights.
-	if(intersection.object->type == Material::refractive) {
+	} else if (intersection.object->type == Material::refractive) {
 		clr += refractiveContribution(ray, N, tracer) * (1.15 * rrFactor);
 	}
 
@@ -411,27 +406,28 @@ int main(int argc, char** argv) {
 	const auto antiAliasingScale = args.at("aa-noise-scale").as<float>();
 	const auto gui = !args.count("no-gui");
 
-	auto add = [&tracer](Object* s, Vector cl, float emission, Material type) {
-			s->setMaterial(cl, emission, type);
-			tracer.scene.add(s);
+	auto add = [&tracer](Object* o, Vector cl, Vector emission, Material type) {
+			o->setMaterial(cl, emission, type);
+			tracer.scene.add(o);
 	};
-
+	Vector zero(0, 0, 0);
 	// // Radius, position, color, emission, type (1=diff, 2=spec, 3=refr) for spheres
-	add(new Sphere(Vector(-0.75,-1.45,-4.4), 1.05), Vector(4,8,4), 0, Material::specular); // Middle sphere
-	//add(new Sphere(Vector(1.5,1.5,-4.4), 1.f), Vector(10,2,1), 0, Material::specular); // High sphere
-	add(new Sphere(Vector(2.0,-2.05,-3.7), 0.5), Vector(10,10,1), 0, Material::refractive); // Right sphere
-	add(new Sphere(Vector(-1.75,-1.95,-3.1), 0.6), Vector(4,4,12), 0, Material::diffuse); // Left sphere
+	add(new Sphere(Vector(-0.75,-1.45,-4.4), 1.05), Vector(4,8,4), zero, Material::specular); // Middle sphere
+	//add(new Sphere(Vector(1.5,1.5,-4.4), 1.f), Vector(10,2,1), zero, Material::specular); // High sphere
+	add(new Sphere(Vector(2.0,-2.05,-3.7), 0.5), Vector(10,10,1), zero, Material::refractive); // Right sphere
+	add(new Sphere(Vector(-1.75,-1.95,-3.1), 0.6), Vector(4,4,12), zero, Material::diffuse); // Left sphere
 	// Position, normal, color, emission, type for planes
   const auto X = Vector(1, 0, 0);
   const auto Y = Vector(0, 1, 0);
   const auto Z = Vector(0, 0, 1);
-	add(new Plane(Y, 2.5), Vector(6,6,6), 0, Material::diffuse); // Bottom plane
-	add(new Plane(Z, 5.5), Vector(6,6,6), 0, Material::diffuse); // Back plane
-	add(new Plane(X, 2.75), Vector(10,2,2), 0, Material::diffuse); // Left plane
-	add(new Plane(-X, 2.75), Vector(2,10,2), 0, Material::diffuse); // Right plane
-	add(new Plane(-Y, 3.0), Vector(6,6,6), 0, Material::diffuse); // Ceiling plane
-	add(new Plane(-Z, 0.5), Vector(6,6,6), 0, Material::diffuse); // Front plane
-	add(new Sphere(Vector(0,1.9,-3), 0.5), Vector(0,0,0), 10000, Material::diffuse); // Light
+	add(new Plane(Y, 2.5), Vector(6,6,6), zero, Material::diffuse); // Bottom plane
+	add(new Plane(Z, 5.5), Vector(6,6,6), zero, Material::diffuse); // Back plane
+	add(new Plane(X, 2.75), Vector(10,2,2), zero, Material::diffuse); // Left plane
+	add(new Plane(-X, 2.75), Vector(2,10,2), zero, Material::diffuse); // Right plane
+	add(new Plane(-Y, 3.0), Vector(6,6,6), zero, Material::diffuse); // Ceiling plane
+	add(new Plane(-Z, 0.5), Vector(6,6,6), zero, Material::diffuse); // Front plane
+	Vector light(10000, 5950, 4370);
+	add(new Sphere(Vector(0,1.9,-3), 0.5), Vector(0,0,0), light, Material::diffuse); // Light
 
 	std::vector<std::vector<Vector>> pixels(height);
 	for(auto &row: pixels) {
