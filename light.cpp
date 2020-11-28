@@ -12,51 +12,15 @@
 #include <chrono>
 
 #include <boost/program_options.hpp>
-#include <Eigen/Dense>
+
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/highgui.hpp>
+
+#include "vector.hpp"
 
 namespace light {
 
 static float eps = std::numeric_limits<float>::epsilon();
-
-#ifdef USE_EIGEN
-using Vector = Eigen::Vector3f;
-#else
-struct Vector {
-	float x, y, z;
-	Vector(float x0, float y0, float z0) : x(x0), y(y0), z(z0) {}
-	Vector operator + (const Vector &b) const {
-		return Vector(x + b.x, y + b.y, z + b.z);
-	}
-	Vector& operator += (const Vector &b) {
-		x += b.x;
-		y += b.y;
-		z += b.z;
-		return *this;
-	}
-	Vector operator - (const Vector &b) const {
-		return Vector(x-b.x,y-b.y,z-b.z);
-	}
-	Vector operator - () const { return Vector(-x, -y, -z); }
-	Vector operator * (float b) const { return Vector(x*b, y*b, z*b); }
-	Vector operator / (float b) const { return Vector(x/b, y/b, z/b); }
-	Vector cwiseProduct(const Vector &b) const {
-		return Vector(x*b.x, y*b.y, z*b.z);
-	}
-  Vector normalized() { return *this * (1.f/sqrt(x*x + y*y + z*z)); }
-	float squaredNorm() { return x*x + y*y + z*z; }
-	float dot(const Vector &b) const { return x*b.x + y*b.y + z*b.z; }
-	Vector cross(const Vector &b) const {
-		return Vector(y*b.z - z*b.y, z*b.x - x*b.z, x*b.y - y*b.x);
-	}
-	const float& operator () (size_t i) const { return i==0 ? x : (i==1 ? y : z); }
-	Vector abs() const {
-		return Vector(std::abs(x), std::abs(y), std::abs(z));
-	}
-	const Vector& array() const { return *this; } // For Eigen compatibility only
-};
-#endif
 
 struct Ray {
 	Vector origin;
@@ -237,7 +201,7 @@ orthonormalSystem(const Vector& v1) {
 // Use public domain xoroshiro128** PRNG implementation as it is
 // faster than Mersenne twister: http://prng.di.unimi.it/xoroshiro128starstar.c
 using XoshiroState = std::array<uint64_t, 2>;
-XoshiroState state = {1654, 4};
+XoshiroState rngState = {1654, 4};
 inline std::uint64_t rotl(std::uint64_t x, int k) { return (x << k) | (x >> (64 - k)); }
 
 uint64_t xoshiro128ss(XoshiroState &s) {
@@ -257,36 +221,101 @@ inline double to_double(uint64_t x) {
 	return u.d - 1.0;
 }
 
-// These are not thread safe but do we care if the RNG state is corrupted?
+// Uniform [-1..1)
 inline float rnd() {
-	return 2.0*to_double(xoshiro128ss(state)) - 1.0;
-};
-
-inline float rnd2() {
-	return to_double(xoshiro128ss(state));
-};
-
-std::pair<bool, float> rouletteFactor(int depth, int maxDepth, float rrStopProbability) {
-	float rrFactor = 1.0;
-	if (depth >= maxDepth) {
-		if (rnd2() <= rrStopProbability) {
-			return std::make_pair(true, rrFactor);
-		}
-		rrFactor = 1.0 / (1.0 - rrStopProbability);
-	}
-	return std::make_pair(false, rrFactor);
+	return 2.0*to_double(xoshiro128ss(rngState)) - 1.0;
 }
 
-Vector trace(Ray &ray, const Scene& scene, int depth, float refractiveIndex, Halton& hal, Halton& hal2) {
+// Uniform [0..1)
+inline float rnd2() {
+	return to_double(xoshiro128ss(rngState));
+}
+
+Halton hal;
+Halton hal2;
+
+struct RayTracerContext {
+	Scene scene;
+	int depth;
+	float refractiveIndex;
+	float rouletteDepth;
+	float stopProb;
+
+	RayTracerContext() : depth(0) {}
+	RayTracerContext& next() {
+		depth += 1;
+		return *this;
+	}
+};
+
+std::pair<bool, float> rouletteWeight(float stopProb) {
+	if (rnd2() <= stopProb) { return std::make_pair(true, 1.0); }
+	return std::make_pair(false, 1.0 / (1.0 - stopProb));
+}
+
+Vector trace(Ray ray, RayTracerContext& tracer);
+
+Vector diffuseContribution(Ray ray, Vector normal, Intersection& intersection, RayTracerContext& tracer) {
+	Vector rotX, rotY;
+	std::tie(rotX, rotY, std::ignore) = orthonormalSystem(normal);
+
+#ifdef USE_EIGEN
+	Eigen::Matrix3f R;
+	R << rotX, rotY, N;
+	ray.direction = R * hemisphere(rnd2(), rnd2());	// Rotation applied to normalised vector is still unit.
+#else
+	const auto sampledDir = hemisphere(rnd2(), rnd2());
+	ray.direction = Vector(
+		Vector(rotX.x, rotY.x, normal.x).dot(sampledDir),
+		Vector(rotX.y, rotY.y, normal.y).dot(sampledDir),
+		Vector(rotX.z, rotY.z, normal.z).dot(sampledDir)
+	);
+#endif
+
+	float cost = ray.direction.dot(normal);
+	auto result = trace(ray, tracer.next());
+	return result.cwiseProduct(intersection.object->colour) * cost;
+}
+
+Vector specularContribution(Ray ray, Vector normal, RayTracerContext& tracer) {
+	auto cost = ray.direction.dot(normal);
+	ray.direction = (ray.direction - normal * (cost * 2.f)).normalized();
+	return trace(ray, tracer.next());
+}
+
+Vector refractiveContribution(Ray ray, Vector normal, RayTracerContext& tracer) {
+	auto n = tracer.refractiveIndex;
+	auto R0 = (1.0-n)/(1.0+n);
+	R0 = R0*R0;
+	if(normal.dot(ray.direction) > 0) { // we're inside the medium
+		normal = -normal;
+		n = 1 / n;
+	}
+	n = 1 / n;
+	auto cost1 = (normal.dot(ray.direction))*-1; // cosine of theta_1
+	auto cost2 = 1.0 - n*n*(1.0-cost1*cost1); // cosine of theta_2
+	auto Rprob = R0 + (1.0-R0) * powf(1.0 - cost1, 5.0); // Schlick-approximation
+	if (cost2 > 0 && rnd2() > Rprob) { // refraction direction
+		ray.direction = ((ray.direction*n)+(normal*(n*cost1-sqrt(cost2)))).normalized();
+	} else { // reflection direction
+		ray.direction = (ray.direction+normal*(cost1*2)).normalized();
+	}
+
+	return trace(ray, tracer.next());
+}
+
+Vector trace(Ray ray, RayTracerContext& tracer) {
 	Vector clr(0, 0, 0);
 
 	// Russian roulette: starting at depth 5, each recursive step will stop with a probability of 0.1
-	bool stop;
-	float rrFactor;
-	std::tie(stop, rrFactor) = rouletteFactor(depth, 5, 0.1);
-	if (stop) { return clr; }
+	float rrFactor = 1.0;
+	if (tracer.depth >= tracer.rouletteDepth) {
+	  bool stop;
+		std::tie(stop, rrFactor) = rouletteWeight(tracer.stopProb);
+		if (stop) { return clr; }
+	}
 
-	Intersection intersection = scene.intersect(ray);
+	Intersection intersection = tracer.scene.intersect(ray);
 	if (!intersection) { return clr; }
 
 	// Travel the ray to the hit point where the closest object lies and compute the surface normal there.
@@ -299,58 +328,20 @@ Vector trace(Ray &ray, const Scene& scene, int depth, float refractiveIndex, Hal
 
 	// Diffuse BRDF - choose an outgoing direction with hemisphere sampling.
 	if(intersection.object->type == Material::diffuse) {
-		Vector rotX(0, 0, 0), rotY(0, 0, 0);
-		std::tie(rotX, rotY, std::ignore) = orthonormalSystem(N);
-#ifdef USE_EIGEN
-		Eigen::Matrix3f R;
-		R << rotX, rotY, N;
-		ray.direction = R * hemisphere(rnd2(), rnd2());	// Rotation applied to normalised vector is still unit.
-#else
-		const auto sampledDir = hemisphere(rnd2(), rnd2());
-		ray.direction = Vector(
-			Vector(rotX.x, rotY.x, N.x).dot(sampledDir),
-			Vector(rotX.y, rotY.y, N.y).dot(sampledDir),
-			Vector(rotX.z, rotY.z, N.z).dot(sampledDir)
-		);
-#endif
-
-		float cost = ray.direction.dot(N);
-		auto result = trace(ray, scene, depth + 1, refractiveIndex, hal, hal2);
-		clr += (result.cwiseProduct(intersection.object->colour)) * cost * 0.1 * rrFactor;
+		clr += diffuseContribution(ray, N, intersection, tracer) * (0.1 * rrFactor);
 	}
 
 	// Specular BRDF - this is a singularity in the rendering equation that follows
 	// delta distribution, therefore we handle this case explicitly - one incoming
 	// direction -> one outgoing direction, that is, the perfect reflection direction.
 	if(intersection.object->type == Material::specular) {
-		auto cost = ray.direction.dot(N);
-		ray.direction = (ray.direction - N * (cost * 2.f)).normalized();
-		auto result = trace(ray, scene, depth + 1, refractiveIndex, hal, hal2);
-		clr += result * rrFactor;
+		clr += specularContribution(ray, N, tracer) * rrFactor;
 	}
 
 	// Glass/refractive BRDF - we use the vector version of Snell's law and Fresnel's law
 	// to compute the outgoing reflection and refraction directions and probability weights.
 	if(intersection.object->type == Material::refractive) {
-		auto n = refractiveIndex;
-		auto R0 = (1.0-n)/(1.0+n);
-		R0 = R0*R0;
-		if(N.dot(ray.direction) > 0) { // we're inside the medium
-			N = -N;
-			n = 1 / n;
-		}
-		n = 1 / n;
-		auto cost1 = (N.dot(ray.direction))*-1; // cosine of theta_1
-		auto cost2 = 1.0 - n*n*(1.0-cost1*cost1); // cosine of theta_2
-		auto Rprob = R0 + (1.0-R0) * powf(1.0 - cost1, 5.0); // Schlick-approximation
-		if (cost2 > 0 && rnd2() > Rprob) { // refraction direction
-			ray.direction = ((ray.direction*n)+(N*(n*cost1-sqrt(cost2)))).normalized();
-		} else { // reflection direction
-			ray.direction = (ray.direction+N*(cost1*2)).normalized();
-		}
-
-		auto result = trace(ray, scene, depth + 1, refractiveIndex, hal, hal2);
-		clr += result * (1.15 * rrFactor);
+		clr += refractiveContribution(ray, N, tracer) * (1.15 * rrFactor);
 	}
 
 	return clr;
@@ -369,6 +360,8 @@ getArgs(int argc, char** argv) {
     ("height,h", po::value<std::uint32_t>()->default_value(200), "Output image height.")
     ("samples,s", po::value<std::uint32_t>()->default_value(32), "Samples per pixel.")
     ("refractive-index,n", po::value<float>()->default_value(1.5), "Refractive index.")
+		("roulette-depth", po::value<float>()->default_value(5), "Number of bounces before rays are randomly stopped.")
+		("stop-prob", po::value<float>()->default_value(0.1), "Probability of a ray being stopped.")
 		("aa-noise-scale,a", po::value<float>()->default_value(1.0/700), "Scale for pixel space anti-aliasing noise.")
 		("no-gui", "Disable display of render window.")
   ;
@@ -401,10 +394,26 @@ int main(int argc, char** argv) {
   std::cerr << "light epsilon: " << light::eps << "\n";
 
   using namespace light;
-  Scene scene;
-	auto add = [&scene](Object* s, Vector cl, float emission, Material type) {
+
+	RayTracerContext tracer;
+  tracer.refractiveIndex = args.at("refractive-index").as<float>();
+	tracer.rouletteDepth = args.at("roulette-depth").as<float>();
+	tracer.stopProb = args.at("stop-prob").as<float>();
+
+	// correlated Halton-sequence dimensions
+	hal.number(0, 2);
+	hal2.number(0, 2);
+
+  const auto fileName = args.at("outfile").as<std::string>();
+  const auto width = args.at("width").as<std::uint32_t>();
+  const auto height = args.at("height").as<std::uint32_t>();
+	const auto spp = args.at("samples").as<std::uint32_t>();
+	const auto antiAliasingScale = args.at("aa-noise-scale").as<float>();
+	const auto gui = !args.count("no-gui");
+
+	auto add = [&tracer](Object* s, Vector cl, float emission, Material type) {
 			s->setMaterial(cl, emission, type);
-			scene.add(s);
+			tracer.scene.add(s);
 	};
 
 	// // Radius, position, color, emission, type (1=diff, 2=spec, 3=refr) for spheres
@@ -424,14 +433,6 @@ int main(int argc, char** argv) {
 	add(new Plane(-Z, 0.5), Vector(6,6,6), 0, Material::diffuse); // Front plane
 	add(new Sphere(Vector(0,1.9,-3), 0.5), Vector(0,0,0), 10000, Material::diffuse); // Light
 
-  const auto fileName = args.at("outfile").as<std::string>();
-  const auto width = args.at("width").as<std::uint32_t>();
-  const auto height = args.at("height").as<std::uint32_t>();
-	const auto spp = args.at("samples").as<std::uint32_t>();
-  const auto refractiveIndex = args.at("refractive-index").as<float>();
-	const auto antiAliasingScale = args.at("aa-noise-scale").as<float>();
-	const auto gui = !args.count("no-gui");
-
 	std::vector<std::vector<Vector>> pixels(height);
 	for(auto &row: pixels) {
 		row.resize(width, Vector(0, 0, 0));
@@ -439,11 +440,6 @@ int main(int argc, char** argv) {
 
 	cv::Mat image(height, width, CV_8UC3);
 	image = cv::Vec3b(0, 0, 0);
-
-	// correlated Halton-sequence dimensions
-	Halton hal, hal2;
-	hal.number(0, 2);
-	hal2.number(0, 2);
 
 	auto startTime = std::chrono::steady_clock::now();
   std::uint64_t samples = 0u;
@@ -457,14 +453,14 @@ int main(int argc, char** argv) {
 							<< "% samples: " << samples
 							<< " elapsed seconds: " << elapsed_secs
 							<< " samples/sec: " << samples / elapsed_secs << "\t";
-		#pragma omp parallel for schedule(dynamic) firstprivate(hal,hal2)
+		#pragma omp parallel for schedule(dynamic) firstprivate(hal, hal2)
 		for (std::uint32_t col = 0; col < width; ++col) {
 			for(std::uint32_t row = 0; row < height; ++row) {
 				Vector cam = camcr(col, row, width, height); // construct image plane coordinates
 				Vector aaNoise(rnd(), rnd(), 0.f);
 				cam += aaNoise * antiAliasingScale;
 				Ray ray(Vector(0, 0, 0), cam);
-				auto color = trace(ray, scene, 0, refractiveIndex, hal, hal2);
+				auto color = trace(ray, tracer);
 				pixels[row][col] = pixels[row][col] + color / spp; // write the contributions
 			}
 
