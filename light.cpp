@@ -66,7 +66,7 @@ struct Object {
 struct Plane : public Object {
 	Vector n;
 	float d;
-	Plane(const Vector& normal, float offset) : n(normal), d(offset) {}
+	Plane(const Vector& normal, float offset) : n(normal.normalized()), d(offset) {}
   virtual ~Plane() {}
 
 	virtual Vector normal(const Vector&) const override { return n; }
@@ -76,6 +76,34 @@ struct Plane : public Object {
 		if (angle != 0.f) {
 			auto t = -((n.dot(ray.origin)) + d) / angle;
 			return (t > eps) ? t : 0.f;
+		}
+
+		return 0.f;
+	}
+};
+
+struct Disc : public Object {
+	Vector n;
+	Vector c;
+	float d;
+	float r2;
+	Disc(const Vector& normal, const Vector& centre, float radius)
+		: n(normal.normalized()), c(centre), d(std::abs(centre.dot(n))), r2(radius*radius) {}
+  virtual ~Disc() {}
+
+	virtual Vector normal(const Vector&) const override { return n; }
+
+	virtual float intersect(const Ray& ray) const override {
+		auto angle = n.dot(ray.direction);
+		if (angle != 0.f) {
+			auto t = -((n.dot(ray.origin)) + d) / angle;
+			if (t > eps) {
+				const auto hitPoint = ray.origin + ray.direction*t;
+				auto d2 = (hitPoint - c).squaredNorm();
+				if (d2 < r2) {
+					return t;
+				}
+			}
 		}
 
 		return 0.f;
@@ -468,9 +496,8 @@ int main(int argc, char** argv) {
 			tracer.scene.add(o);
 	};
 	Vector zero(0, 0, 0);
-	// // Radius, position, color, emission, type (1=diff, 2=spec, 3=refr) for spheres
+	// Radius, position, color, emission, type (1=diff, 2=spec, 3=refr) for spheres
 	add(new Sphere(Vector(-0.75,-1.45,-4.4), 1.05), Vector(4,8,4), zero, Material::specular); // Middle sphere
-	//add(new Sphere(Vector(1.5,1.5,-4.4), 1.f), Vector(10,2,1), zero, Material::specular); // High sphere
 	add(new Sphere(Vector(2.0,-2.05,-3.7), 0.5), Vector(10,10,1), zero, Material::refractive); // Right sphere
 	add(new Sphere(Vector(-1.75,-1.95,-3.1), 0.6), Vector(4,4,12), zero, Material::diffuse); // Left sphere
 	// Position, normal, color, emission, type for planes
@@ -483,8 +510,10 @@ int main(int argc, char** argv) {
 	add(new Plane(-X, 2.75), Vector(2,10,2), zero, Material::diffuse); // Right plane
 	add(new Plane(-Y, 3.0), Vector(6,6,6), zero, Material::diffuse); // Ceiling plane
 	add(new Plane(-Z, 0.5), Vector(6,6,6), zero, Material::diffuse); // Front plane
-	Vector light(10000, 5950, 4370);
-	add(new Sphere(Vector(0,1.9,-3), 0.5), Vector(0,0,0), light, Material::diffuse); // Light
+	Vector light1(10000, 5950, 4370);
+	add(new Disc(-Y, Vector(0, 2.9999, -4), 0.7), Vector(0,0,0), light1, Material::diffuse); // Ceiling light
+	Vector light2(500, 600, 1000);
+	add(new Sphere(Vector(-1.12,-2.3,-3.5), 0.2f), Vector(100,200,100), light2, Material::specular); // Small ball light
 
 	std::vector<std::vector<Vector>> pixels(height);
 	for(auto &row: pixels) {

@@ -34,8 +34,9 @@ struct Vector {
 	Vector cwiseProduct(const Vector &b) const {
 		return Vector(x*b.x, y*b.y, z*b.z);
 	}
-  Vector normalized() { return *this * (1.f/sqrt(x*x + y*y + z*z)); }
-	float squaredNorm() { return x*x + y*y + z*z; }
+  Vector normalized() const { return *this * (1.f/sqrt(x*x + y*y + z*z)); }
+	float squaredNorm() const { return x*x + y*y + z*z; }
+	float norm() const { return std::sqrt(squaredNorm()); }
 	float dot(const Vector &b) const { return x*b.x + y*b.y + z*b.z; }
 	Vector cross(const Vector &b) const {
 		return Vector(y*b.z - z*b.y, z*b.x - x*b.z, x*b.y - y*b.x);
