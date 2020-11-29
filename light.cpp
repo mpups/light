@@ -373,37 +373,28 @@ Vector trace(Ray& ray, RayTracerContext tracer) {
 
 	Vector total = zero;
 	if (hitEmitter) {
-		std::cerr << "Num contributions for ray: " << contributions.size() << "\n";
 		while (!contributions.empty()) {
 			auto c = contributions.back();
 			contributions.pop_back();
 
 			switch (c.type) {
 			case Contribution::Type::DIFFUSE:
-				{auto diff = total.cwiseProduct(c.clr) * c.weight;
-				std::cerr << "D(" << c.weight << " col=" << diff << ")";
-				total = diff;}
+				total = total.cwiseProduct(c.clr) * c.weight;
 				break;
 			case Contribution::Type::EMIT:
-				std::cerr << "E(" << c.weight << " " << c.clr << ")";
 				total += c.clr * c.weight;
 				break;
 			case Contribution::Type::SPECULAR:
-				std::cerr << "S(" << c.weight << ")";
 				total *= c.weight;
 				break;
 			case Contribution::Type::REFLECT:
-				std::cerr << "R(" << c.weight << ")";
 				total *= c.weight;
 				break;
 			case Contribution::Type::SKIP:
 			default:
-				std::cerr << "0(" << c.weight << ")";
 				break;
 			}
 		}
-		std::cerr << " = " << total;
-		std::cerr << "\n";
 	}
 	return total;
 }
@@ -515,7 +506,7 @@ int main(int argc, char** argv) {
 							<< "% samples: " << samples
 							<< " elapsed seconds: " << elapsed_secs
 							<< " samples/sec: " << samples / elapsed_secs << "\t";
-		//#pragma omp parallel for schedule(dynamic) firstprivate(hal, hal2)
+		#pragma omp parallel for schedule(dynamic) firstprivate(hal, hal2)
 		for (std::uint32_t col = 0; col < width; ++col) {
 			for(std::uint32_t row = 0; row < height; ++row) {
 				Vector cam = camcr(col, row, width, height); // construct image plane coordinates
@@ -523,7 +514,6 @@ int main(int argc, char** argv) {
 				cam += aaNoise * antiAliasingScale;
 				Ray ray(Vector(0, 0, 0), cam);
 				auto color = trace(ray, tracer);
-				std::cerr << " = " << color << "\n";
 				pixels[row][col] = pixels[row][col] + color / spp; // write the contributions
 			}
 
