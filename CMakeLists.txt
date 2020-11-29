@@ -17,3 +17,6 @@ include_directories(${Boost_INCLUDE_DIRS} ${OpenCV_INCLUDE_DIRS})
 #add_definitions(-DUSE_EIGEN)
 add_executable(light light.cpp)
 target_link_libraries(light Eigen3::Eigen Boost::program_options OpenMP::OpenMP_CXX ${OpenCV_LIBS})
+
+add_executable(old old.cpp)
+target_link_libraries(old Eigen3::Eigen Boost::program_options OpenMP::OpenMP_CXX ${OpenCV_LIBS})

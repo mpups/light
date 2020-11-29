@@ -40,12 +40,21 @@ struct Object {
 	Vector colour;
 	Vector emission;
 	Material type;
-  Object() : colour(0.f, 0.f, 0.f), emission(0.f, 0.f, 0.f), type(Material::diffuse) {}
+	bool emissive;
+
+  Object() :
+		colour(0.f, 0.f, 0.f), emission(0.f, 0.f, 0.f),
+		type(Material::diffuse), emissive(false) {}
 
 	void setMaterial(Vector c, Vector e, Material m) {
     colour = c;
     emission = e;
-    type = m;
+		if (emission.x == 0.f && emission.y == 0.f && emission.z == 0.f) {
+			emissive = false;
+		} else {
+			emissive = true;
+		}
+		type = m;
   }
 
   virtual ~Object() {}
@@ -248,15 +257,28 @@ struct RayTracerContext {
 	}
 };
 
-std::pair<bool, float> rouletteWeight(float stopProb) {
+struct Contribution {
+	enum class Type {
+		DIFFUSE,
+		EMIT,
+		SPECULAR,
+		REFLECT,
+		SKIP
+	};
+	Vector clr;
+	float weight;
+	Type type;
+};
+
+std::pair<bool, float> rouletteWeight(const float stopProb) {
 	if (rnd2() <= stopProb) { return std::make_pair(true, 1.0); }
 	return std::make_pair(false, 1.0 / (1.0 - stopProb));
 }
 
-Vector trace(Ray ray, RayTracerContext tracer);
+Vector trace(Ray& ray, RayTracerContext tracer);
 
 // Diffuse BRDF - choose an outgoing direction with hemisphere sampling.
-Vector diffuseContribution(Ray ray, Vector normal, Intersection& intersection, RayTracerContext& tracer) {
+Contribution diffuse(Ray& ray, Vector normal, const Intersection& intersection, float rrFactor) {
 	Vector rotX, rotY;
 	std::tie(rotX, rotY, std::ignore) = orthonormalSystem(normal);
 
@@ -273,23 +295,21 @@ Vector diffuseContribution(Ray ray, Vector normal, Intersection& intersection, R
 	);
 #endif
 
-	float cost = ray.direction.dot(normal);
-	auto result = trace(ray, tracer.next());
-	return result.cwiseProduct(intersection.object->colour) * cost;
+	float weight = ray.direction.dot(normal) * .1f * rrFactor;
+	return Contribution{intersection.object->colour, weight, Contribution::Type::DIFFUSE};
 }
 
 // Specular BRDF - this is a singularity in the rendering equation that follows
 // delta distribution, therefore we handle this case explicitly - one incoming
 // direction -> one outgoing direction, that is, the perfect reflection direction.
-Vector specularContribution(Ray ray, Vector normal, RayTracerContext& tracer) {
+void reflect(Ray& ray, Vector normal) {
 	auto cost = ray.direction.dot(normal);
 	ray.direction = (ray.direction - normal * (cost * 2.f)).normalized();
-	return trace(ray, tracer.next());
 }
 
 // Glass/refractive BRDF - we use the vector version of Snell's law and Fresnel's law
 // to compute the outgoing reflection and refraction directions and probability weights.
-Vector refractiveContribution(Ray ray, Vector normal, RayTracerContext& tracer) {
+void refract(Ray& ray, Vector normal, RayTracerContext tracer) {
 	auto n = tracer.refractiveIndex;
 	auto R0 = (1.0-n)/(1.0+n);
 	R0 = R0*R0;
@@ -306,40 +326,86 @@ Vector refractiveContribution(Ray ray, Vector normal, RayTracerContext& tracer) 
 	} else { // reflection direction
 		ray.direction = (ray.direction+normal*(cost1*2)).normalized();
 	}
-
-	return trace(ray, tracer.next());
 }
 
-Vector trace(Ray ray, RayTracerContext tracer) {
-	Vector clr(0, 0, 0);
+Vector trace(Ray& ray, RayTracerContext tracer) {
+	static const Vector zero(0, 0, 0);
+	static const Vector one(1, 1, 1);
+	std::vector<Contribution> contributions;
+	contributions.reserve(2*tracer.rouletteDepth);
+	bool hitEmitter = false;
 
-	// Russian roulette ray termination:
-	float rrFactor = 1.0;
-	if (tracer.depth >= tracer.rouletteDepth) {
-	  bool stop;
-		std::tie(stop, rrFactor) = rouletteWeight(tracer.stopProb);
-		if (stop) { return clr; }
+	while (true) {
+		// Russian roulette ray termination:
+		float rrFactor = 1.0;
+		if (tracer.depth >= tracer.rouletteDepth) {
+			bool stop;
+			std::tie(stop, rrFactor) = rouletteWeight(tracer.stopProb);
+			if (stop) { break; }
+		}
+
+		Intersection intersection = tracer.scene.intersect(ray);
+		if (!intersection) { break; }
+
+		// Travel the ray to the hit point where the closest object lies and compute the surface normal there.
+		ray.origin += ray.direction * intersection.t;
+		Vector normal = intersection.object->normal(ray.origin);
+
+		// Add the emission, the L_e(x,w) part of the rendering equation, but scale it with the Russian Roulette probability weight.
+		if (intersection.object->emissive) {
+			contributions.push_back({intersection.object->emission, rrFactor, Contribution::Type::EMIT});
+			hitEmitter = true;
+		}
+
+		if (intersection.object->type == Material::diffuse) {
+			const auto result = diffuse(ray, normal, intersection, rrFactor);
+			contributions.push_back(result);
+		} else if (intersection.object->type == Material::specular) {
+			reflect(ray, normal);
+			contributions.push_back({zero, rrFactor, Contribution::Type::SPECULAR});
+		} else if (intersection.object->type == Material::refractive) {
+			refract(ray, normal, tracer);
+			contributions.push_back({zero, 1.15f * rrFactor, Contribution::Type::REFLECT});
+		}
+
+		tracer.next();
 	}
 
-	Intersection intersection = tracer.scene.intersect(ray);
-	if (!intersection) { return clr; }
+	Vector total = zero;
+	if (hitEmitter) {
+		std::cerr << "Num contributions for ray: " << contributions.size() << "\n";
+		while (!contributions.empty()) {
+			auto c = contributions.back();
+			contributions.pop_back();
 
-	// Travel the ray to the hit point where the closest object lies and compute the surface normal there.
-	ray.origin += ray.direction * intersection.t;
-	Vector N = intersection.object->normal(ray.origin);
-
-	// Add the emission, the L_e(x,w) part of the rendering equation, but scale it with the Russian Roulette probability weight.
-	clr += intersection.object->emission * rrFactor;
-
-	if (intersection.object->type == Material::diffuse) {
-		clr += diffuseContribution(ray, N, intersection, tracer) * (0.1 * rrFactor);
-	} else if (intersection.object->type == Material::specular) {
-		clr += specularContribution(ray, N, tracer) * rrFactor;
-	} else if (intersection.object->type == Material::refractive) {
-		clr += refractiveContribution(ray, N, tracer) * (1.15 * rrFactor);
+			switch (c.type) {
+			case Contribution::Type::DIFFUSE:
+				{auto diff = total.cwiseProduct(c.clr) * c.weight;
+				std::cerr << "D(" << c.weight << " col=" << diff << ")";
+				total = diff;}
+				break;
+			case Contribution::Type::EMIT:
+				std::cerr << "E(" << c.weight << " " << c.clr << ")";
+				total += c.clr * c.weight;
+				break;
+			case Contribution::Type::SPECULAR:
+				std::cerr << "S(" << c.weight << ")";
+				total *= c.weight;
+				break;
+			case Contribution::Type::REFLECT:
+				std::cerr << "R(" << c.weight << ")";
+				total *= c.weight;
+				break;
+			case Contribution::Type::SKIP:
+			default:
+				std::cerr << "0(" << c.weight << ")";
+				break;
+			}
+		}
+		std::cerr << " = " << total;
+		std::cerr << "\n";
 	}
-
-	return clr;
+	return total;
 }
 
 } // end namespace light
@@ -449,7 +515,7 @@ int main(int argc, char** argv) {
 							<< "% samples: " << samples
 							<< " elapsed seconds: " << elapsed_secs
 							<< " samples/sec: " << samples / elapsed_secs << "\t";
-		#pragma omp parallel for schedule(dynamic) firstprivate(hal, hal2)
+		//#pragma omp parallel for schedule(dynamic) firstprivate(hal, hal2)
 		for (std::uint32_t col = 0; col < width; ++col) {
 			for(std::uint32_t row = 0; row < height; ++row) {
 				Vector cam = camcr(col, row, width, height); // construct image plane coordinates
@@ -457,6 +523,7 @@ int main(int argc, char** argv) {
 				cam += aaNoise * antiAliasingScale;
 				Ray ray(Vector(0, 0, 0), cam);
 				auto color = trace(ray, tracer);
+				std::cerr << " = " << color << "\n";
 				pixels[row][col] = pixels[row][col] + color / spp; // write the contributions
 			}
 
@@ -473,7 +540,7 @@ int main(int argc, char** argv) {
 		if (s == spp - 1 || s % 16 == 0) {
 			for (std::uint32_t col = 0; col < width; ++col) {
 				for(std::uint32_t row = 0; row < height; ++row) {
-					const Vector p = pixels[row][col] * (spp/(float)s);
+					const Vector p = pixels[row][col] * ((spp-1)/(float)s);
 					const auto value = cv::Vec3b(
 						std::min(p(2), 255.f),
 						std::min(p(1), 255.f),

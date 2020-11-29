@@ -1,4 +1,5 @@
 #include <Eigen/Dense>
+#include <iostream>
 
 namespace light {
 
@@ -18,11 +19,17 @@ struct Vector {
 		z += b.z;
 		return *this;
 	}
+	Vector operator * (float b) const { return Vector(x*b, y*b, z*b); }
+	Vector& operator *= (float s) {
+		x *= s;
+		y *= s;
+		z *= s;
+		return *this;
+	}
 	Vector operator - (const Vector &b) const {
-		return Vector(x-b.x,y-b.y,z-b.z);
+		return Vector(x-b.x, y-b.y, z-b.z);
 	}
 	Vector operator - () const { return Vector(-x, -y, -z); }
-	Vector operator * (float b) const { return Vector(x*b, y*b, z*b); }
 	Vector operator / (float b) const { return Vector(x/b, y/b, z/b); }
 	Vector cwiseProduct(const Vector &b) const {
 		return Vector(x*b.x, y*b.y, z*b.z);
@@ -39,6 +46,14 @@ struct Vector {
 	}
 	const Vector& array() const { return *this; } // For Eigen compatibility only
 };
+
 #endif
 
 } // end namespace light
+
+#ifndef USE_EIGEN
+std::ostream& operator << (std::ostream &os, const light::Vector &v) {
+    os << v.x << " " << v.y << " " << v.z;
+    return os;
+}
+#endif
