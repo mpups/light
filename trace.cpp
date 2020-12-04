@@ -4,7 +4,6 @@
 #include <cstdlib>
 #include <string>
 #include <vector>
-#include <array>
 #include <limits>
 #include <memory>
 #include <cmath>
@@ -16,45 +15,15 @@
 #include <opencv2/highgui.hpp>
 
 #include "light.hpp"
+#include "jobs.hpp"
+#include "xoshiro.hpp"
 
-// Use public domain xoroshiro128** PRNG implementation as it is
-// faster than Mersenne twister: http://prng.di.unimi.it/xoroshiro128starstar.c
-using XoshiroState = std::array<uint64_t, 2>;
 XoshiroState rngState = {1654, 4};
-inline std::uint64_t rotl(std::uint64_t x, int k) { return (x << k) | (x >> (64 - k)); }
-
-uint64_t xoshiro128ss(XoshiroState &s) {
-	const uint64_t s0 = s[0];
-	uint64_t s1 = s[1];
-	const uint64_t result = rotl(s0 * 5, 7) * 9;
-
-	s1 ^= s0;
-	s[0] = rotl(s0, 24) ^ s1 ^ (s1 << 16); // a, b
-	s[1] = rotl(s1, 37); // c
-
-	return result;
-}
-
-inline double to_double(uint64_t x) {
-	const union { uint64_t i; double d; } u = { .i = UINT64_C(0x3FF) << 52 | x >> 12 };
-	return u.d - 1.0;
-}
-
-// Uniform [-1..1)
-inline float rnd() {
-	return 2.0*to_double(xoshiro128ss(rngState)) - 1.0;
-}
-
-// Uniform [0..1)
-inline float rnd2() {
-	return to_double(xoshiro128ss(rngState));
-}
-
 light::Halton hal;
 light::Halton hal2;
 
 std::pair<bool, float> rouletteWeight(const float stopProb) {
-	if (rnd2() <= stopProb) { return std::make_pair(true, 1.0); }
+	if (rnd2(rngState) <= stopProb) { return std::make_pair(true, 1.0); }
 	return std::make_pair(false, 1.0 / (1.0 - stopProb));
 }
 
@@ -70,9 +39,9 @@ light::Contribution diffuse(light::Ray& ray, light::Vector normal,
 #ifdef USE_EIGEN
 	Eigen::Matrix3f R;
 	R << rotX, rotY, N;
-	ray.direction = R * hemisphere(rnd2(), rnd2());	// Rotation applied to normalised vector is still unit.
+	ray.direction = R * hemisphere(rnd2(rngState), rnd2(rngState));	// Rotation applied to normalised vector is still unit.
 #else
-	const auto sampledDir = hemisphere(rnd2(), rnd2());
+	const auto sampledDir = hemisphere(rnd2(rngState), rnd2(rngState));
 	ray.direction = light::Vector(
 		Vector(rotX.x, rotY.x, normal.x).dot(sampledDir),
 		Vector(rotX.y, rotY.y, normal.y).dot(sampledDir),
@@ -106,7 +75,7 @@ void refract(light::Ray& ray, light::Vector normal, light::RayTracerContext trac
 	auto cost1 = -normal.dot(ray.direction); // cosine of theta_1
 	auto cost2 = 1.0 - n*n*(1.0-cost1*cost1); // cosine of theta_2
 	auto Rprob = R0 + (1.0-R0) * powf(1.0 - cost1, 5.0); // Schlick-approximation
-	if (cost2 > 0 && rnd2() > Rprob) { // refraction direction
+	if (cost2 > 0 && rnd2(rngState) > Rprob) { // refraction direction
 		ray.direction = ((ray.direction*n)+(normal*(n*cost1-sqrt(cost2)))).normalized();
 	} else { // reflection direction
 		ray.direction = (ray.direction+normal*(cost1*2)).normalized();
@@ -271,7 +240,7 @@ int main(int argc, char** argv) {
 	Vector light2(500, 600, 1000);
 	add(new Sphere(Vector(-1.12,-2.3,-3.5), 0.2f), Vector(100,200,100), light2, Material::specular); // Small ball light
 
-	std::vector<std::vector<Vector>> pixels(height);
+	light::Image pixels(height);
 	for(auto &row: pixels) {
 		row.resize(width, Vector(0, 0, 0));
 	}
@@ -285,6 +254,11 @@ int main(int argc, char** argv) {
 		cv::namedWindow(fileName);
 	}
 
+	auto jobs = createTracingJobs(width, height, 16, 16, spp);
+	for (auto& j : jobs) {
+		std::cerr << "Job: " << j << "\n";
+	}
+
 	for(std::uint32_t s = 0; s < spp; ++s) {
 		double elapsed_secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - startTime).count();
 		std::cerr << std::setprecision(3) << "\rRendering: " << s*100.f/spp
@@ -295,7 +269,7 @@ int main(int argc, char** argv) {
 		for (std::uint32_t col = 0; col < width; ++col) {
 			for(std::uint32_t row = 0; row < height; ++row) {
 				Vector cam = camcr(col, row, width, height); // construct image plane coordinates
-				Vector aaNoise(rnd(), rnd(), 0.f);
+				Vector aaNoise(rnd(rngState), rnd(rngState), 0.f);
 				cam += aaNoise * antiAliasingScale;
 				Ray ray(Vector(0, 0, 0), cam);
 				auto color = trace(ray, tracer);

@@ -1,3 +1,5 @@
+#pragma once
+
 #include <vector>
 #include <array>
 #include <limits>
@@ -250,5 +252,7 @@ struct Contribution {
 	float weight;
 	Type type;
 };
+
+using Image = std::vector<std::vector<light::Vector>>;
 
 } // end namespace light
