@@ -10,7 +10,7 @@ struct TraceTileJob {
 	std::size_t endCol;
 	std::size_t spp;
 	light::Image pixels;
-	XoshiroState rngState;
+	xoshiro::State rngState;
 	light::Halton hal;
 	light::Halton hal2;
 
@@ -40,7 +40,11 @@ struct TraceTileJob {
 
 std::vector<TraceTileJob> createTracingJobs(std::size_t imageWidth, std::size_t imageHeight,
 																						std::size_t tileWidth, std::size_t tileHeight,
-																						std::size_t samples) {
+																						std::size_t samples, std::uint64_t seed) {
+	// Make sure every job has a unique random sequence derived from same seed:
+	xoshiro::State state;
+	xoshiro::seed(state, seed);
+
 	// Split the image into tiles and make a job for each:
 	std::vector<TraceTileJob> jobs;
 	for (std::size_t r = 0; r < imageHeight; r += tileHeight) {
@@ -54,6 +58,8 @@ std::vector<TraceTileJob> createTracingJobs(std::size_t imageWidth, std::size_t 
 				endCol = imageWidth;
 			}
 			jobs.emplace_back(r, c, endRow, endCol, samples);
+			jobs.back().rngState = state;
+			xoshiro::jump(state);
 		}
 	}
 	return jobs;

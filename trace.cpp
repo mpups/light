@@ -18,12 +18,12 @@
 #include "jobs.hpp"
 #include "xoshiro.hpp"
 
-XoshiroState rngState = {1654, 4};
+xoshiro::State rngState = {1, 2};
 light::Halton hal;
 light::Halton hal2;
 
 std::pair<bool, float> rouletteWeight(const float stopProb) {
-	if (rnd2(rngState) <= stopProb) { return std::make_pair(true, 1.0); }
+	if (xoshiro::rnd2(rngState) <= stopProb) { return std::make_pair(true, 1.0); }
 	return std::make_pair(false, 1.0 / (1.0 - stopProb));
 }
 
@@ -39,9 +39,9 @@ light::Contribution diffuse(light::Ray& ray, light::Vector normal,
 #ifdef USE_EIGEN
 	Eigen::Matrix3f R;
 	R << rotX, rotY, N;
-	ray.direction = R * hemisphere(rnd2(rngState), rnd2(rngState));	// Rotation applied to normalised vector is still unit.
+	ray.direction = R * hemisphere(xoshiro::rnd2(rngState), xoshiro::rnd2(rngState));	// Rotation applied to normalised vector is still unit.
 #else
-	const auto sampledDir = hemisphere(rnd2(rngState), rnd2(rngState));
+	const auto sampledDir = hemisphere(xoshiro::rnd2(rngState), xoshiro::rnd2(rngState));
 	ray.direction = light::Vector(
 		Vector(rotX.x, rotY.x, normal.x).dot(sampledDir),
 		Vector(rotX.y, rotY.y, normal.y).dot(sampledDir),
@@ -75,7 +75,7 @@ void refract(light::Ray& ray, light::Vector normal, light::RayTracerContext trac
 	auto cost1 = -normal.dot(ray.direction); // cosine of theta_1
 	auto cost2 = 1.0 - n*n*(1.0-cost1*cost1); // cosine of theta_2
 	auto Rprob = R0 + (1.0-R0) * powf(1.0 - cost1, 5.0); // Schlick-approximation
-	if (cost2 > 0 && rnd2(rngState) > Rprob) { // refraction direction
+	if (cost2 > 0 && xoshiro::rnd2(rngState) > Rprob) { // refraction direction
 		ray.direction = ((ray.direction*n)+(normal*(n*cost1-sqrt(cost2)))).normalized();
 	} else { // reflection direction
 		ray.direction = (ray.direction+normal*(cost1*2)).normalized();
@@ -168,6 +168,7 @@ getArgs(int argc, char** argv) {
 		("roulette-depth", po::value<float>()->default_value(5), "Number of bounces before rays are randomly stopped.")
 		("stop-prob", po::value<float>()->default_value(0.1), "Probability of a ray being stopped.")
 		("aa-noise-scale,a", po::value<float>()->default_value(1.0/700), "Scale for pixel space anti-aliasing noise.")
+		("seed", po::value<std::uint64_t>()->default_value(1), "Seed for random number generation.")
 		("no-gui", "Disable display of render window.")
   ;
 
@@ -204,6 +205,7 @@ int main(int argc, char** argv) {
   tracer.refractiveIndex = args.at("refractive-index").as<float>();
 	tracer.rouletteDepth = args.at("roulette-depth").as<float>();
 	tracer.stopProb = args.at("stop-prob").as<float>();
+	xoshiro::seed(rngState, args.at("seed").as<std::uint64_t>());
 
 	// correlated Halton-sequence dimensions
 	hal.number(0, 2);
@@ -254,10 +256,8 @@ int main(int argc, char** argv) {
 		cv::namedWindow(fileName);
 	}
 
-	auto jobs = createTracingJobs(width, height, 16, 16, spp);
-	for (auto& j : jobs) {
-		std::cerr << "Job: " << j << "\n";
-	}
+	auto jobs = createTracingJobs(width, height, 16, 16, spp, 1);
+	std::cerr << "Job count: " << jobs.size() << "\n";
 
 	for(std::uint32_t s = 0; s < spp; ++s) {
 		double elapsed_secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - startTime).count();
@@ -269,7 +269,7 @@ int main(int argc, char** argv) {
 		for (std::uint32_t col = 0; col < width; ++col) {
 			for(std::uint32_t row = 0; row < height; ++row) {
 				Vector cam = camcr(col, row, width, height); // construct image plane coordinates
-				Vector aaNoise(rnd(rngState), rnd(rngState), 0.f);
+				Vector aaNoise(xoshiro::rnd(rngState), xoshiro::rnd(rngState), 0.f);
 				cam += aaNoise * antiAliasingScale;
 				Ray ray(Vector(0, 0, 0), cam);
 				auto color = trace(ray, tracer);
