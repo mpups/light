@@ -18,20 +18,17 @@
 #include "jobs.hpp"
 #include "xoshiro.hpp"
 
-xoshiro::State rngState = {1, 2};
-light::Halton hal;
-light::Halton hal2;
-
-std::pair<bool, float> rouletteWeight(const float stopProb) {
-	if (xoshiro::rnd2(rngState) <= stopProb) { return std::make_pair(true, 1.0); }
+std::pair<bool, float> rouletteWeight(xoshiro::State& state, const float stopProb) {
+	if (xoshiro::rnd2(state) <= stopProb) { return std::make_pair(true, 1.0); }
 	return std::make_pair(false, 1.0 / (1.0 - stopProb));
 }
 
-light::Vector trace(light::Ray& ray, light::RayTracerContext tracer);
+light::Vector trace(light::Ray& ray, light::RayTracerContext tracer, Generators gen);
 
 // Diffuse BRDF - choose an outgoing direction with hemisphere sampling.
 light::Contribution diffuse(light::Ray& ray, light::Vector normal,
-										 const light::Intersection& intersection, float rrFactor) {
+										 const light::Intersection& intersection, float rrFactor,
+										 Generators gen) {
 	using namespace light;
 	Vector rotX, rotY;
 	std::tie(rotX, rotY, std::ignore) = orthonormalSystem(normal);
@@ -41,7 +38,7 @@ light::Contribution diffuse(light::Ray& ray, light::Vector normal,
 	R << rotX, rotY, N;
 	ray.direction = R * hemisphere(xoshiro::rnd2(rngState), xoshiro::rnd2(rngState));	// Rotation applied to normalised vector is still unit.
 #else
-	const auto sampledDir = hemisphere(xoshiro::rnd2(rngState), xoshiro::rnd2(rngState));
+	const auto sampledDir = hemisphere(xoshiro::rnd2(gen.rng), xoshiro::rnd2(gen.rng));
 	ray.direction = light::Vector(
 		Vector(rotX.x, rotY.x, normal.x).dot(sampledDir),
 		Vector(rotX.y, rotY.y, normal.y).dot(sampledDir),
@@ -63,7 +60,8 @@ void reflect(light::Ray& ray, light::Vector normal) {
 
 // Glass/refractive BRDF - we use the vector version of Snell's law and Fresnel's law
 // to compute the outgoing reflection and refraction directions and probability weights.
-void refract(light::Ray& ray, light::Vector normal, light::RayTracerContext tracer) {
+void refract(light::Ray& ray, light::Vector normal,
+						 light::RayTracerContext tracer, xoshiro::State& state) {
 	auto n = tracer.refractiveIndex;
 	auto R0 = (1.0-n)/(1.0+n);
 	R0 = R0*R0;
@@ -75,14 +73,14 @@ void refract(light::Ray& ray, light::Vector normal, light::RayTracerContext trac
 	auto cost1 = -normal.dot(ray.direction); // cosine of theta_1
 	auto cost2 = 1.0 - n*n*(1.0-cost1*cost1); // cosine of theta_2
 	auto Rprob = R0 + (1.0-R0) * powf(1.0 - cost1, 5.0); // Schlick-approximation
-	if (cost2 > 0 && xoshiro::rnd2(rngState) > Rprob) { // refraction direction
+	if (cost2 > 0 && xoshiro::rnd2(state) > Rprob) { // refraction direction
 		ray.direction = ((ray.direction*n)+(normal*(n*cost1-sqrt(cost2)))).normalized();
 	} else { // reflection direction
 		ray.direction = (ray.direction+normal*(cost1*2)).normalized();
 	}
 }
 
-light::Vector trace(light::Ray& ray, light::RayTracerContext tracer) {
+light::Vector trace(light::Ray& ray, light::RayTracerContext tracer, Generators gen) {
 	using namespace light;
 	static const Vector zero(0, 0, 0);
 	static const Vector one(1, 1, 1);
@@ -95,7 +93,7 @@ light::Vector trace(light::Ray& ray, light::RayTracerContext tracer) {
 		float rrFactor = 1.0;
 		if (tracer.depth >= tracer.rouletteDepth) {
 			bool stop;
-			std::tie(stop, rrFactor) = rouletteWeight(tracer.stopProb);
+			std::tie(stop, rrFactor) = rouletteWeight(gen.rng, tracer.stopProb);
 			if (stop) { break; }
 		}
 
@@ -113,13 +111,13 @@ light::Vector trace(light::Ray& ray, light::RayTracerContext tracer) {
 		}
 
 		if (intersection.object->type == Material::diffuse) {
-			const auto result = diffuse(ray, normal, intersection, rrFactor);
+			const auto result = diffuse(ray, normal, intersection, rrFactor, gen);
 			contributions.push_back(result);
 		} else if (intersection.object->type == Material::specular) {
 			reflect(ray, normal);
 			contributions.push_back({zero, rrFactor, Contribution::Type::SPECULAR});
 		} else if (intersection.object->type == Material::refractive) {
-			refract(ray, normal, tracer);
+			refract(ray, normal, tracer, gen.rng);
 			contributions.push_back({zero, 1.15f * rrFactor, Contribution::Type::REFLECT});
 		}
 
@@ -205,11 +203,6 @@ int main(int argc, char** argv) {
   tracer.refractiveIndex = args.at("refractive-index").as<float>();
 	tracer.rouletteDepth = args.at("roulette-depth").as<float>();
 	tracer.stopProb = args.at("stop-prob").as<float>();
-	xoshiro::seed(rngState, args.at("seed").as<std::uint64_t>());
-
-	// correlated Halton-sequence dimensions
-	hal.number(0, 2);
-	hal2.number(0, 2);
 
   const auto fileName = args.at("outfile").as<std::string>();
   const auto width = args.at("width").as<std::uint32_t>();
@@ -256,7 +249,8 @@ int main(int argc, char** argv) {
 		cv::namedWindow(fileName);
 	}
 
-	auto jobs = createTracingJobs(width, height, 16, 16, spp, 1);
+	const auto seed = args.at("seed").as<std::uint64_t>();
+	auto jobs = createTracingJobs(width, height, 16, 16, spp, seed);
 	std::cerr << "Job count: " << jobs.size() << "\n";
 
 	for(std::uint32_t s = 0; s < spp; ++s) {
@@ -265,20 +259,22 @@ int main(int argc, char** argv) {
 							<< "% samples: " << samples
 							<< " elapsed seconds: " << elapsed_secs
 							<< " samples/sec: " << samples / elapsed_secs << "\t";
-		#pragma omp parallel for schedule(dynamic) firstprivate(hal, hal2)
-		for (std::uint32_t col = 0; col < width; ++col) {
-			for(std::uint32_t row = 0; row < height; ++row) {
+
+		#pragma omp parallel for schedule(dynamic)
+		for (std::size_t j = 0; j < jobs.size(); ++j) {
+			auto& job = jobs[j];
+			job.visitPixels([&] (std::size_t row, std::size_t col, light::Vector& p) {
 				Vector cam = camcr(col, row, width, height); // construct image plane coordinates
-				Vector aaNoise(xoshiro::rnd(rngState), xoshiro::rnd(rngState), 0.f);
+				Vector aaNoise(xoshiro::rnd(job.rngState), xoshiro::rnd(job.rngState), 0.f);
 				cam += aaNoise * antiAliasingScale;
 				Ray ray(Vector(0, 0, 0), cam);
-				auto color = trace(ray, tracer);
-				pixels[row][col] = pixels[row][col] + color / spp; // write the contributions
-			}
+				auto color = trace(ray, tracer, job.getGenerators());
+				p += color / spp; // write the contributions
+			});
 
-			if (gui && col % 20 == 0) {
-			  // We need to service the window's event loop regularly:
-				#pragma omp critical
+			// We need to service the window's event loop regularly:
+			#pragma omp critical
+			if (gui && j % 20 == 0) {
 				cv::waitKey(1);
 			}
 		}
@@ -287,23 +283,22 @@ int main(int argc, char** argv) {
 
 		// Save/display image at regular intervals and when done:
 		if (s == spp - 1 || s % 16 == 0) {
-			for (std::uint32_t col = 0; col < width; ++col) {
-				for(std::uint32_t row = 0; row < height; ++row) {
-					const Vector p = pixels[row][col] * ((spp-1)/(float)s);
+			for (auto& j : jobs) {
+				j.visitPixels([&] (std::size_t row, std::size_t col, light::Vector& p) {
+					const Vector v = p * ((spp-1)/(float)s);
 					const auto value = cv::Vec3b(
-						std::min(p(2), 255.f),
-						std::min(p(1), 255.f),
-						std::min(p(0), 255.f)
+						std::min(v(2), 255.f),
+						std::min(v(1), 255.f),
+						std::min(v(0), 255.f)
 					);
 					image.at<cv::Vec3b>(row, col) = value;
-				}
+				});
 			}
 
 			cv::imwrite(fileName, image);
 			if (gui) {
 				cv::imshow(fileName, image);
 			}
-
 		}
 	}
 

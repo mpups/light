@@ -180,31 +180,6 @@ Vector hemisphere(float u1, float u2) {
 	return Vector(cos(phi)*r, sin(phi)*r, u1);
 }
 
-struct Halton {
-	float value, inv_base;
-
-	void number(int i,int base) {
-		float f = inv_base = 1.0 / base;
-		value = 0.0;
-		while(i > 0) {
-			value += f * (float)(i%base);
-			i /= base;
-			f *= inv_base;
-		}
-	}
-
-	void next() {
-		float r = 1.0 - value - 0.0000001;
-		if(inv_base<r) value += inv_base;
-		else {
-			float h = inv_base, hh;
-			do {hh = h; h *= inv_base;} while(h >=r);
-			value += hh + h - 1.0;
-		}
-	}
-	float get() { return value; }
-};
-
 std::tuple<Vector, Vector, Vector>
 orthonormalSystem(const Vector& v1) {
     Vector v2(0, 0, 0);

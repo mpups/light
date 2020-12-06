@@ -3,6 +3,13 @@
 #include "light.hpp"
 #include "xoshiro.hpp"
 
+struct Generators {
+	Generators(xoshiro::State& state)
+		: rng(state) {}
+
+	xoshiro::State& rng;
+};
+
 struct TraceTileJob {
 	std::size_t startRow;
 	std::size_t endRow;
@@ -11,8 +18,6 @@ struct TraceTileJob {
 	std::size_t spp;
 	light::Image pixels;
 	xoshiro::State rngState;
-	light::Halton hal;
-	light::Halton hal2;
 
 	TraceTileJob(std::size_t sr, std::size_t sc,
 							 std::size_t er, std::size_t ec,
@@ -20,22 +25,24 @@ struct TraceTileJob {
 							 : 	startRow(sr), endRow(er),
 							 	  startCol(sc), endCol(ec), spp(samples),
 									pixels(endRow - startRow),
-                  rngState({1654, 4})
+                  rngState({0, 0})
 	{
 		for(auto &row: pixels) {
 			row.resize(endCol - startCol, light::Vector(0, 0, 0));
 		}
 	}
 
-	using ResultVisitor = std::function<void(std::size_t r, std::size_t c, const light::Vector& p)>;
+	using Visitor = std::function<void(std::size_t r, std::size_t c, light::Vector& p)>;
 
-	void visitResult(ResultVisitor&& visit) const {
+	void visitPixels(Visitor&& visit) {
 		for (std::size_t r = startRow; r < endRow; ++r) {
 			for (std::size_t c = startCol; c < endCol; ++c) {
-					visit(r, c, pixels[r][c]);
+					visit(r, c, pixels[r - startRow][c - startCol]);
 			}
 		}
 	}
+
+	Generators getGenerators() { return Generators(rngState); }
 };
 
 std::vector<TraceTileJob> createTracingJobs(std::size_t imageWidth, std::size_t imageHeight,
@@ -65,9 +72,9 @@ std::vector<TraceTileJob> createTracingJobs(std::size_t imageWidth, std::size_t 
 	return jobs;
 }
 
-void accumulateTraceJobResults(const std::vector<TraceTileJob>& jobs, light::Image& image) {
-	for (const auto& j : jobs) {
-		j.visitResult([&] (std::size_t r, std::size_t c, const light::Vector& p) {
+void accumulateTraceJobResults(std::vector<TraceTileJob>& jobs, light::Image& image) {
+	for (auto& j : jobs) {
+		j.visitPixels([&] (std::size_t r, std::size_t c, light::Vector& p) {
 			image[r][c] += p;
 		});
 	}
