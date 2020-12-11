@@ -164,7 +164,7 @@ int main(int argc, char** argv) {
 				Vector aaNoise(xoshiro::rnd(job.rngState), xoshiro::rnd(job.rngState), 0.f);
 				cam += aaNoise * antiAliasingScale;
 				Ray ray(Vector(0, 0, 0), cam);
-				auto color = trace(ray, tracer, job.getGenerators());
+				auto color = trace(ray, tracer, job);
 				p += color / spp; // write the contributions
 			});
 
@@ -190,6 +190,16 @@ int main(int argc, char** argv) {
 
 	std::chrono::duration<double> seconds = std::chrono::steady_clock::now() - startTime;
 	std::cout << "\nRender time: " << seconds.count() << " seconds\n";
+
+	std::size_t totalRays = 0;
+	std::size_t maxPathLength = 0;
+	for (auto& j : jobs) {
+		totalRays += j.totalRayCasts;
+		maxPathLength = std::max(maxPathLength, j.maxPathLength);
+	}
+
+	auto raysPerSec = totalRays/seconds.count();
+	std::cout << "\nTotal Rays: " << totalRays << " Rays/sec: " << raysPerSec << " Max path length: " << maxPathLength << "\n";
 
   return EXIT_SUCCESS;
 }

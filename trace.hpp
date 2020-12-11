@@ -10,7 +10,7 @@ std::pair<bool, float> rouletteWeight(xoshiro::State& state, const float stopPro
 	return std::make_pair(false, 1.0 / (1.0 - stopProb));
 }
 
-light::Vector trace(light::Ray& ray, light::RayTracerContext tracer, Generators gen);
+light::Vector trace(light::Ray& ray, light::RayTracerContext tracer, TraceTileJob& job);
 
 // Diffuse BRDF - choose an outgoing direction with hemisphere sampling.
 light::Contribution diffuse(light::Ray& ray, light::Vector normal,
@@ -67,13 +67,14 @@ void refract(light::Ray& ray, light::Vector normal,
 	}
 }
 
-light::Vector trace(light::Ray& ray, light::RayTracerContext tracer, Generators gen) {
+light::Vector trace(light::Ray& ray, light::RayTracerContext tracer, TraceTileJob& job) {
 	using namespace light;
 	static const Vector zero(0, 0, 0);
 	static const Vector one(1, 1, 1);
 	std::vector<Contribution> contributions;
 	contributions.reserve(2*tracer.rouletteDepth);
 	bool hitEmitter = false;
+	auto gen = job.getGenerators();
 
 	while (true) {
 		// Russian roulette ray termination:
@@ -110,6 +111,9 @@ light::Vector trace(light::Ray& ray, light::RayTracerContext tracer, Generators 
 
 		tracer.next();
 	}
+
+	job.totalRayCasts += contributions.size();
+	job.maxPathLength = std::max(job.maxPathLength, contributions.size());
 
 	Vector total = zero;
 	if (hitEmitter) {
