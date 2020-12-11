@@ -43,6 +43,9 @@ struct TraceTileJob {
 	}
 
 	Generators getGenerators() { return Generators(rngState); }
+
+	std::size_t rows() const { return endRow - startRow; }
+	std::size_t cols() const { return endCol - startCol; }
 };
 
 std::vector<TraceTileJob> createTracingJobs(std::size_t imageWidth, std::size_t imageHeight,

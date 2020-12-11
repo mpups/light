@@ -9,6 +9,7 @@
 #include <opencv2/highgui.hpp>
 
 #include "trace.hpp"
+#include "exr.hpp"
 
 boost::program_options::variables_map
 getArgs(int argc, char** argv) {
@@ -17,8 +18,10 @@ getArgs(int argc, char** argv) {
   desc.add_options()
     ("help", "Output help and exit.")
     ("outfile,o", po::value<std::string>()->required(), "Set output file name.")
-    ("width,w", po::value<std::uint32_t>()->default_value(200), "Output image width.")
-    ("height,h", po::value<std::uint32_t>()->default_value(200), "Output image height.")
+    ("width,w", po::value<std::uint32_t>()->default_value(256), "Output image width.")
+    ("height,h", po::value<std::uint32_t>()->default_value(256), "Output image height.")
+    ("tile-width", po::value<std::uint32_t>()->default_value(16), "Width of tile per job.")
+    ("tile-height", po::value<std::uint32_t>()->default_value(16), "Height of tile per job.")
     ("samples,s", po::value<std::uint32_t>()->default_value(32), "Samples per pixel.")
     ("refractive-index,n", po::value<float>()->default_value(1.5), "Refractive index.")
 		("roulette-depth", po::value<float>()->default_value(5), "Number of bounces before rays are randomly stopped.")
@@ -51,6 +54,40 @@ getArgs(int argc, char** argv) {
   return vars;
 }
 
+std::vector<std::vector<float>> pixelsFromJobs(std::vector<TraceTileJob>& jobs) {
+  std::vector<std::vector<float>> tiles;
+  tiles.reserve(jobs.size());
+
+	for (auto& job : jobs) {
+		const auto tiledPixelCount = 3 * job.rows() * job.cols();
+		tiles.emplace_back(tiledPixelCount);
+		auto& tile = tiles.back();
+
+		std::size_t c = 0;
+		job.visitPixels([&] (std::size_t, std::size_t, light::Vector& p) {
+			tile[c] = p.x;
+			tile[c + 1] = p.y;
+			tile[c + 2] = p.z;
+			c += 3;
+		});
+  }
+  return tiles;
+}
+
+void cvImageFromJobs(std::vector<TraceTileJob>& jobs, cv::Mat& image, float scale) {
+	for (auto& j : jobs) {
+		j.visitPixels([&] (std::size_t row, std::size_t col, light::Vector& p) {
+			const light::Vector v = p * scale;
+			const auto value = cv::Vec3b(
+				std::min(v(2), 255.f),
+				std::min(v(1), 255.f),
+				std::min(v(0), 255.f)
+			);
+			image.at<cv::Vec3b>(row, col) = value;
+		});
+	}
+}
+
 int main(int argc, char** argv) {
   const auto args = getArgs(argc, argv);
   std::cerr << "light epsilon: " << light::eps << "\n";
@@ -65,6 +102,8 @@ int main(int argc, char** argv) {
   const auto fileName = args.at("outfile").as<std::string>();
   const auto width = args.at("width").as<std::uint32_t>();
   const auto height = args.at("height").as<std::uint32_t>();
+  const auto tileWidth = args.at("tile-width").as<std::uint32_t>();
+  const auto tileHeight = args.at("tile-height").as<std::uint32_t>();
 	const auto spp = args.at("samples").as<std::uint32_t>();
 	const auto antiAliasingScale = args.at("aa-noise-scale").as<float>();
 	const auto gui = !args.count("no-gui");
@@ -99,7 +138,6 @@ int main(int argc, char** argv) {
 	}
 
 	cv::Mat image(height, width, CV_8UC3);
-	image = cv::Vec3b(0, 0, 0);
 
 	auto startTime = std::chrono::steady_clock::now();
   std::uint64_t samples = 0u;
@@ -108,7 +146,7 @@ int main(int argc, char** argv) {
 	}
 
 	const auto seed = args.at("seed").as<std::uint64_t>();
-	auto jobs = createTracingJobs(width, height, 16, 16, spp, seed);
+	auto jobs = createTracingJobs(width, height, tileWidth, tileHeight, spp, seed);
 	std::cerr << "Job count: " << jobs.size() << "\n";
 
 	for(std::uint32_t s = 0; s < spp; ++s) {
@@ -140,19 +178,9 @@ int main(int argc, char** argv) {
 		samples += width * height;
 
 		// Save/display image at regular intervals and when done:
-		if (s == spp - 1 || s % 16 == 0) {
-			for (auto& j : jobs) {
-				j.visitPixels([&] (std::size_t row, std::size_t col, light::Vector& p) {
-					const Vector v = p * ((spp-1)/(float)s);
-					const auto value = cv::Vec3b(
-						std::min(v(2), 255.f),
-						std::min(v(1), 255.f),
-						std::min(v(0), 255.f)
-					);
-					image.at<cv::Vec3b>(row, col) = value;
-				});
-			}
-
+		if (s == spp - 1 || s % 64 == 0) {
+			cvImageFromJobs(jobs, image, (spp-1)/(float)s);
+			writeTiledExr(fileName + ".exr", width, height, tileWidth, tileHeight, pixelsFromJobs(jobs));
 			cv::imwrite(fileName, image);
 			if (gui) {
 				cv::imshow(fileName, image);
