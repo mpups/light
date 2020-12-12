@@ -57,14 +57,16 @@ getArgs(int argc, char** argv) {
 std::vector<std::vector<float>> pixelsFromJobs(std::vector<TraceTileJob>& jobs) {
   std::vector<std::vector<float>> tiles;
   tiles.reserve(jobs.size());
-
-	for (auto& job : jobs) {
-		const auto tiledPixelCount = 3 * job.rows() * job.cols();
+	for (std::size_t j = 0; j < jobs.size(); ++j) {
+		const auto tiledPixelCount = 3 * jobs[j].rows() * jobs[j].cols();
 		tiles.emplace_back(tiledPixelCount);
-		auto& tile = tiles.back();
+	}
 
+	#pragma omp parallel for schedule(dynamic)
+	for (std::size_t j = 0; j < jobs.size(); ++j) {
+		auto& tile = tiles[j];
 		std::size_t c = 0;
-		job.visitPixels([&] (std::size_t, std::size_t, light::Vector& p) {
+		jobs[j].visitPixels([&] (std::size_t, std::size_t, light::Vector& p) {
 			tile[c] = p.x;
 			tile[c + 1] = p.y;
 			tile[c + 2] = p.z;
@@ -75,8 +77,10 @@ std::vector<std::vector<float>> pixelsFromJobs(std::vector<TraceTileJob>& jobs) 
 }
 
 void cvImageFromJobs(std::vector<TraceTileJob>& jobs, cv::Mat& image, float scale) {
-	for (auto& j : jobs) {
-		j.visitPixels([&] (std::size_t row, std::size_t col, light::Vector& p) {
+	#pragma omp parallel for schedule(dynamic)
+	for (std::size_t j = 0; j < jobs.size(); ++j) {
+		auto& job = jobs[j];
+		job.visitPixels([&] (std::size_t row, std::size_t col, light::Vector& p) {
 			const light::Vector v = p * scale;
 			const auto value = cv::Vec3b(
 				std::min(v(2), 255.f),
@@ -178,7 +182,7 @@ int main(int argc, char** argv) {
 		samples += width * height;
 
 		// Save/display image at regular intervals and when done:
-		if (s == spp - 1 || s % 64 == 0) {
+		if (s == spp - 1 || s == 1 || s % 64 == 0) {
 			cvImageFromJobs(jobs, image, (spp-1)/(float)s);
 			writeTiledExr(fileName + ".exr", width, height, tileWidth, tileHeight, pixelsFromJobs(jobs));
 			cv::imwrite(fileName, image);
