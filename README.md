@@ -17,6 +17,6 @@ For a full description of options: `./light --help`
 
 ## Example Output
 
-![Box](examples/html/test_png_0_2.jpg)
+![Box Scene](examples/html/test_png_0_2.jpg)
 
-[a relative link](examples/html/cornell.html)
+[Viewing HDR output in a browser](examples/html/cornell.html)
