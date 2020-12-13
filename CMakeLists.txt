@@ -19,5 +19,5 @@ include_directories(${Boost_INCLUDE_DIRS} ${OpenCV_INCLUDE_DIRS})
 add_library(exr exr.hpp exr.cpp)
 target_link_libraries(exr OpenMP::OpenMP_CXX IlmImf)
 
-add_executable(trace trace.cpp)
+add_executable(trace trace.cpp light.cpp)
 target_link_libraries(trace Eigen3::Eigen Boost::program_options OpenMP::OpenMP_CXX ${OpenCV_LIBS} exr)

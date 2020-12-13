@@ -12,7 +12,8 @@
 
 namespace light {
 
-static float eps;
+extern float epsilon;
+extern float intersectionEpsilon;
 
 struct Ray {
 	Vector origin;
@@ -67,7 +68,7 @@ struct Plane : public Object {
 		auto angle = n.dot(ray.direction);
 		if (angle != 0.f) {
 			auto t = -((n.dot(ray.origin)) + d) / angle;
-			return (t > eps) ? t : 0.f;
+			return (t > epsilon) ? t : 0.f;
 		}
 
 		return 0.f;
@@ -89,7 +90,7 @@ struct Disc : public Object {
 		auto angle = n.dot(ray.direction);
 		if (angle != 0.f) {
 			auto t = -((n.dot(ray.origin)) + d) / angle;
-			if (t > eps) {
+			if (t > epsilon) {
 				const auto hitPoint = ray.origin + ray.direction*t;
 				auto d2 = (hitPoint - c).squaredNorm();
 				if (d2 < r2) {
@@ -157,7 +158,7 @@ struct Scene {
     // Dumb linear search:
 		for (const auto o: objects) {
 			auto t = o->intersect(ray);
-			if (t > eps && t < closestIntersection.t) {
+			if (t > intersectionEpsilon && t < closestIntersection.t) {
 				closestIntersection = Intersection(o, t);
 			}
 		}
@@ -165,6 +166,7 @@ struct Scene {
 	}
 };
 
+inline
 Vector camcr(float x, float y, std::uint32_t width, std::uint32_t height) {
 	float w = width;
 	float h = height;
@@ -175,12 +177,14 @@ Vector camcr(float x, float y, std::uint32_t width, std::uint32_t height) {
 				-1.0);
 }
 
+inline
 Vector hemisphere(float u1, float u2) {
 	const float r = sqrtf(1.f - u1*u1);
 	const float phi = 2 * M_PI * u2;
 	return Vector(cos(phi)*r, sin(phi)*r, u1);
 }
 
+inline
 std::tuple<Vector, Vector, Vector>
 orthonormalSystem(const Vector& v1) {
     Vector v2(0, 0, 0);

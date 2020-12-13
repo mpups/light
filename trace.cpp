@@ -28,6 +28,8 @@ getArgs(int argc, char** argv) {
 		("stop-prob", po::value<float>()->default_value(0.1), "Probability of a ray being stopped.")
 		("aa-noise-scale,a", po::value<float>()->default_value(1.0/700), "Scale for pixel space anti-aliasing noise.")
 		("seed", po::value<std::uint64_t>()->default_value(1), "Seed for random number generation.")
+		("epsilon", po::value<float>()->default_value(light::epsilon), "Epsilon used in ray tracing, defaults to the machine epsilon.")
+		("intersection-epsilon", po::value<float>()->default_value(light::intersectionEpsilon), "Tolerance to avoid re-intersections of out-going rays.")
 		("no-gui", "Disable display of render window.")
   ;
 
@@ -94,7 +96,6 @@ void cvImageFromJobs(std::vector<TraceTileJob>& jobs, cv::Mat& image, float scal
 
 int main(int argc, char** argv) {
   const auto args = getArgs(argc, argv);
-  std::cerr << "light epsilon: " << light::eps << "\n";
 
   using namespace light;
 
@@ -102,6 +103,8 @@ int main(int argc, char** argv) {
   tracer.refractiveIndex = args.at("refractive-index").as<float>();
 	tracer.rouletteDepth = args.at("roulette-depth").as<float>();
 	tracer.stopProb = args.at("stop-prob").as<float>();
+  light::epsilon = args.at("epsilon").as<float>();
+	light::intersectionEpsilon = args.at("intersection-epsilon").as<float>();
 
   const auto fileName = args.at("outfile").as<std::string>();
   const auto width = args.at("width").as<std::uint32_t>();
@@ -118,9 +121,9 @@ int main(int argc, char** argv) {
 	};
 	Vector zero(0, 0, 0);
 	// Radius, position, color, emission, type (1=diff, 2=spec, 3=refr) for spheres
-	add(new Sphere(Vector(-0.75,-1.45,-4.4), 1.05), Vector(4,8,4), zero, Material::specular); // Middle sphere
-	add(new Sphere(Vector(2.0,-2.05,-3.7), 0.5), Vector(10,10,1), zero, Material::refractive); // Right sphere
-	add(new Sphere(Vector(-1.75,-1.95,-3.1), 0.6), Vector(4,4,12), zero, Material::diffuse); // Left sphere
+	add(new Sphere(Vector(-0.75,-1.45,-4.4), 1.05), Vector(4,8,4), zero, Material::specular); // Mirror sphere
+	add(new Sphere(Vector(2.0,-2.05,-3.7), 0.5), Vector(10,10,1), zero, Material::refractive); // Glass sphere
+	add(new Sphere(Vector(-1.75,-1.95,-3.1), 0.6), Vector(4,4,12), zero, Material::diffuse); // Diffuse sphere
 	// Position, normal, color, emission, type for planes
   const auto X = Vector(1, 0, 0);
   const auto Y = Vector(0, 1, 0);
@@ -133,6 +136,7 @@ int main(int argc, char** argv) {
 	add(new Plane(-Z, 0.5), Vector(6,6,6), zero, Material::diffuse); // Front plane
 	Vector light1(10000, 5950, 4370);
 	add(new Disc(-Y, Vector(0, 2.9999, -4), 0.7), Vector(0,0,0), light1, Material::diffuse); // Ceiling light
+	//add(new Sphere(Vector(0,1.9,-3),.5f), Vector(0, 0, 0), light1, Material::diffuse); // Light
 	Vector light2(500, 600, 1000);
 	add(new Sphere(Vector(-1.12,-2.3,-3.5), 0.2f), Vector(100,200,100), light2, Material::specular); // Small ball light
 

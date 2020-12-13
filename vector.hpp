@@ -53,6 +53,7 @@ struct Vector {
 } // end namespace light
 
 #ifndef USE_EIGEN
+inline
 std::ostream& operator << (std::ostream &os, const light::Vector &v) {
     os << v.x << " " << v.y << " " << v.z;
     return os;
