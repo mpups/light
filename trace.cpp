@@ -135,8 +135,8 @@ int main(int argc, char** argv) {
 	add(new Plane(-Y, 3.0), Vector(6,6,6), zero, Material::diffuse); // Ceiling plane
 	add(new Plane(-Z, 0.5), Vector(6,6,6), zero, Material::diffuse); // Front plane
 	Vector light1(10000, 5950, 4370);
-	add(new Disc(-Y, Vector(0, 2.9999, -4), 0.7), Vector(0,0,0), light1, Material::diffuse); // Ceiling light
-	//add(new Sphere(Vector(0,1.9,-3),.5f), Vector(0, 0, 0), light1, Material::diffuse); // Light
+	//add(new Disc(-Y, Vector(0, 2.9999, -4), 0.7), Vector(0,0,0), light1, Material::diffuse); // Ceiling light
+	add(new Sphere(Vector(0,1.9,-3),.5f), Vector(0, 0, 0), light1, Material::diffuse); // Light
 	Vector light2(500, 600, 1000);
 	add(new Sphere(Vector(-1.12,-2.3,-3.5), 0.2f), Vector(100,200,100), light2, Material::specular); // Small ball light
 
