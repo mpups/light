@@ -147,19 +147,23 @@ struct Intersection {
 };
 
 struct Scene {
-	std::vector<Object*> objects;
+	Scene() {}
+	virtual ~Scene() {}
+	Scene(const Scene&) = delete;
+
+	std::vector<std::unique_ptr<Object>> objects;
 
 	void add(Object* object) {
-		objects.push_back(object);
+		objects.emplace_back(object);
 	}
 
 	Intersection intersect(const Ray& ray) const {
 		Intersection closestIntersection;
     // Dumb linear search:
-		for (const auto o: objects) {
+		for (const auto& o: objects) {
 			auto t = o->intersect(ray);
 			if (t > intersectionEpsilon && t < closestIntersection.t) {
-				closestIntersection = Intersection(o, t);
+				closestIntersection = Intersection(o.get(), t);
 			}
 		}
 		return closestIntersection;
@@ -207,17 +211,13 @@ orthonormalSystem(const Vector& v1) {
 }
 
 struct RayTracerContext {
-	Scene scene;
+	const Scene& scene;
 	int depth;
 	float refractiveIndex;
 	float rouletteDepth;
 	float stopProb;
 
-	RayTracerContext() : depth(0) {}
-	RayTracerContext& next() {
-		depth += 1;
-		return *this;
-	}
+	RayTracerContext(const Scene& s) : scene(s), depth(0) {}
 };
 
 struct Contribution {

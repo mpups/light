@@ -10,7 +10,7 @@ std::pair<bool, float> rouletteWeight(xoshiro::State& state, const float stopPro
 	return std::make_pair(false, 1.0 / (1.0 - stopProb));
 }
 
-light::Vector trace(light::Ray& ray, light::RayTracerContext tracer, TraceTileJob& job);
+light::Vector trace(light::Ray& ray, const light::RayTracerContext& tracer, TraceTileJob& job);
 
 // Diffuse BRDF - choose an outgoing direction with hemisphere sampling.
 light::Contribution diffuse(light::Ray& ray, light::Vector normal,
@@ -48,7 +48,7 @@ void reflect(light::Ray& ray, light::Vector normal) {
 // Glass/refractive BRDF - we use the vector version of Snell's law and Fresnel's law
 // to compute the outgoing reflection and refraction directions and probability weights.
 void refract(light::Ray& ray, light::Vector normal,
-						 light::RayTracerContext tracer, xoshiro::State& state) {
+						 const light::RayTracerContext& tracer, xoshiro::State& state) {
 	auto n = tracer.refractiveIndex;
 	auto R0 = (1.0-n)/(1.0+n);
 	R0 = R0*R0;
@@ -67,7 +67,7 @@ void refract(light::Ray& ray, light::Vector normal,
 	}
 }
 
-light::Vector trace(light::Ray& ray, light::RayTracerContext tracer, TraceTileJob& job) {
+light::Vector trace(light::Ray& ray, const light::RayTracerContext& tracer, TraceTileJob& job) {
 	using namespace light;
 	static const Vector zero(0, 0, 0);
 	static const Vector one(1, 1, 1);
@@ -76,10 +76,12 @@ light::Vector trace(light::Ray& ray, light::RayTracerContext tracer, TraceTileJo
 	bool hitEmitter = false;
 	auto gen = job.getGenerators();
 
+	std::uint32_t depth = 0;
+
 	while (true) {
 		// Russian roulette ray termination:
 		float rrFactor = 1.0;
-		if (tracer.depth >= tracer.rouletteDepth) {
+		if (depth >= tracer.rouletteDepth) {
 			bool stop;
 			std::tie(stop, rrFactor) = rouletteWeight(gen.rng, tracer.stopProb);
 			if (stop) { break; }
@@ -109,7 +111,7 @@ light::Vector trace(light::Ray& ray, light::RayTracerContext tracer, TraceTileJo
 			contributions.push_back({zero, 1.15f * rrFactor, Contribution::Type::REFLECT});
 		}
 
-		tracer.next();
+		depth += 1;
 	}
 
 	job.totalRayCasts += contributions.size();
