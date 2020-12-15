@@ -20,6 +20,8 @@ struct TraceTileJob {
 	xoshiro::State rngState;
 	std::size_t totalRayCasts;
 	std::size_t maxPathLength;
+	bool pathCapture;
+	std::vector<light::Vector> vertices;
 
 	TraceTileJob(std::size_t sr, std::size_t sc,
 							 std::size_t er, std::size_t ec,
@@ -29,7 +31,8 @@ struct TraceTileJob {
 									pixels(endRow - startRow),
                   rngState({0, 0}),
 									totalRayCasts(0),
-									maxPathLength(0)
+									maxPathLength(0),
+									pathCapture(false)
 	{
 		for(auto &row: pixels) {
 			row.resize(endCol - startCol, light::Vector(0, 0, 0));

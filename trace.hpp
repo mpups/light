@@ -10,8 +10,6 @@ std::pair<bool, float> rouletteWeight(xoshiro::State& state, const float stopPro
 	return std::make_pair(false, 1.0 / (1.0 - stopProb));
 }
 
-light::Vector trace(light::Ray& ray, const light::RayTracerContext& tracer, TraceTileJob& job);
-
 // Diffuse BRDF - choose an outgoing direction with hemisphere sampling.
 light::Contribution diffuse(light::Ray& ray, light::Vector normal,
 										 const light::Intersection& intersection, float rrFactor,
@@ -73,11 +71,16 @@ light::Vector trace(light::Ray& ray, const light::RayTracerContext& tracer, Trac
 	static const Vector one(1, 1, 1);
 	std::vector<Contribution> contributions;
 	contributions.reserve(2*tracer.rouletteDepth);
+	if (job.pathCapture) {
+		job.vertices.clear();
+		job.vertices.reserve(contributions.capacity());
+	}
 	bool hitEmitter = false;
 	auto gen = job.getGenerators();
 
 	std::uint32_t depth = 0;
 
+	// Loop to trace the ray through the scence and produce the ray path:
 	while (true) {
 		// Russian roulette ray termination:
 		float rrFactor = 1.0;
@@ -90,11 +93,14 @@ light::Vector trace(light::Ray& ray, const light::RayTracerContext& tracer, Trac
 		Intersection intersection = tracer.scene.intersect(ray);
 		if (!intersection) { break; }
 
-		// Travel the ray to the hit point where the closest object lies and compute the surface normal there.
+		// Compute hit point and surface normal there:
 		ray.origin += ray.direction * intersection.t;
 		Vector normal = intersection.object->normal(ray.origin);
 
-		// Add the emission, the L_e(x,w) part of the rendering equation, but scale it with the Russian Roulette probability weight.
+		if (job.pathCapture) {
+			job.vertices.push_back(ray.origin);
+		}
+
 		if (intersection.object->emissive) {
 			contributions.push_back({intersection.object->emission, rrFactor, Contribution::Type::EMIT});
 			hitEmitter = true;
@@ -117,6 +123,7 @@ light::Vector trace(light::Ray& ray, const light::RayTracerContext& tracer, Trac
 	job.totalRayCasts += contributions.size();
 	job.maxPathLength = std::max(job.maxPathLength, contributions.size());
 
+	// Combine all the material contributions along the ray path:
 	Vector total = zero;
 	if (hitEmitter) {
 		while (!contributions.empty()) {

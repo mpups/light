@@ -171,14 +171,31 @@ struct Scene {
 };
 
 inline
-Vector camcr(float x, float y, std::uint32_t width, std::uint32_t height) {
+Vector pixelToRay(float x, float y, std::uint32_t width, std::uint32_t height) {
 	float w = width;
 	float h = height;
 	float fovx = M_PI/4;
 	float fovy = (h/w) * fovx;
-	return Vector(((2*x-w)/w) * tan(fovx),
-				-((2*y-h)/h) * tan(fovy),
+	auto tanfovx = tan(fovx);
+	auto tanfovy = tan(fovy);
+	return Vector(((2*x-w)/w) * tanfovx,
+				-((2*y-h)/h) * tanfovy,
 				-1.0);
+}
+
+inline
+Vector vertexToPixel(Vector v, std::uint32_t width, std::uint32_t height) {
+	float w = width;
+	float h = height;
+	float fovx = M_PI/4;
+	float fovy = (h/w) * fovx;
+	auto tanfovx = tan(fovx);
+	auto tanfovy = tan(fovy);
+	auto x = -v.x / v.z;
+	auto y = v.y / v.z;
+	auto px = (w/2) * ((x/tanfovx) + 1.f);
+	auto py = (h/2) * ((y/tanfovy) + 1.f);
+	return Vector(px, py, v.z);
 }
 
 inline

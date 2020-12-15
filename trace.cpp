@@ -7,6 +7,7 @@
 #include <boost/program_options.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/highgui.hpp>
+#include <opencv2/imgproc.hpp>
 
 #include "trace.hpp"
 #include "exr.hpp"
@@ -93,6 +94,12 @@ void cvImageFromJobs(std::vector<TraceTileJob>& jobs, cv::Mat& image, float scal
 		});
 	}
 }
+struct RayDebug {
+	std::size_t row = 0;
+	std::size_t col = 0;
+	bool enabled = false;	
+  RayDebug() : row(0), col(0), enabled(false) {}
+};
 
 int main(int argc, char** argv) {
   const auto args = getArgs(argc, argv);
@@ -148,10 +155,25 @@ int main(int argc, char** argv) {
 
 	cv::Mat image(height, width, CV_8UC3);
 
+	auto onMouseClick = [](int event, int x, int y, int flags, void* data) {
+		RayDebug& debug = *reinterpret_cast<RayDebug*>(data);
+		if  (event == cv::EVENT_LBUTTONDOWN) {
+			std::cerr <<  "\n" << x << " " << y << " " << flags << "\n";
+			debug.row = y;
+			debug.col = x;
+			debug.enabled = true;
+		}
+		if  (event == cv::EVENT_RBUTTONDOWN) {
+			debug.enabled = false;
+		}
+	};
+
 	auto startTime = std::chrono::steady_clock::now();
   std::uint64_t samples = 0u;
+	RayDebug debug;
 	if (gui) {
 		cv::namedWindow(fileName);
+		cv::setMouseCallback(fileName, onMouseClick, &debug);
 	}
 
 	const auto seed = args.at("seed").as<std::uint64_t>();
@@ -169,7 +191,7 @@ int main(int argc, char** argv) {
 		for (std::size_t j = 0; j < jobs.size(); ++j) {
 			auto& job = jobs[j];
 			job.visitPixels([&] (std::size_t row, std::size_t col, light::Vector& p) {
-				Vector cam = camcr(col, row, width, height); // construct image plane coordinates
+				Vector cam = pixelToRay(col, row, width, height); // construct image plane coordinates
 				Vector aaNoise(xoshiro::rnd(job.rngState), xoshiro::rnd(job.rngState), 0.f);
 				cam += aaNoise * antiAliasingScale;
 				Ray ray(Vector(0, 0, 0), cam);
@@ -192,6 +214,26 @@ int main(int argc, char** argv) {
 			writeTiledExr(fileName + ".exr", width, height, tileWidth, tileHeight, pixelsFromJobs(jobs));
 			cv::imwrite(fileName, image);
 			if (gui) {
+				if (debug.enabled) {
+					TraceTileJob debugJob(debug.row, debug.col, debug.row, debug.col, 1);
+					debugJob.pathCapture = true;
+					debugJob.rngState = jobs.back().rngState;
+					Vector cam = pixelToRay(debug.col, debug.row, width, height);
+					Ray ray(Vector(0, 0, 0), cam);
+					trace(ray, tracer, debugJob);
+					std::vector<Vector> pixels;
+					for (auto& v : debugJob.vertices) {
+						auto p = vertexToPixel(v, width, height);
+						pixels.push_back(p);
+						std::cerr << "\nvertex: " << v << " projected: " << p;
+					}
+					for (std::size_t p = 1; p < pixels.size(); ++p) {
+						auto a = cv::Point2f(pixels[p-1].x, pixels[p-1].y);
+						auto b = cv::Point2f(pixels[p].x, pixels[p].y);
+						cv::line(image, a, b, cv::Vec3b(255, 255, 0), 2, cv::LINE_AA);
+					}
+					std::cerr << "\n";
+				}
 				cv::imshow(fileName, image);
 			}
 		}
