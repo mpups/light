@@ -65,7 +65,7 @@ void refract(light::Ray& ray, light::Vector normal,
 	}
 }
 
-light::Vector trace(light::Ray& ray, const light::RayTracerContext& tracer, TraceTileJob& job) {
+light::Vector trace(const light::Ray& cameraRay, const light::RayTracerContext& tracer, TraceTileJob& job) {
 	using namespace light;
 	static const Vector zero(0, 0, 0);
 	static const Vector one(1, 1, 1);
@@ -81,6 +81,7 @@ light::Vector trace(light::Ray& ray, const light::RayTracerContext& tracer, Trac
 	std::uint32_t depth = 0;
 
 	// Loop to trace the ray through the scence and produce the ray path:
+	auto ray = cameraRay;
 	while (true) {
 		// Russian roulette ray termination:
 		float rrFactor = 1.0;
@@ -122,6 +123,7 @@ light::Vector trace(light::Ray& ray, const light::RayTracerContext& tracer, Trac
 
 	job.totalRayCasts += contributions.size();
 	job.maxPathLength = std::max(job.maxPathLength, contributions.size());
+	job.nonZeroContribution = hitEmitter;
 
 	// Combine all the material contributions along the ray path:
 	Vector total = zero;

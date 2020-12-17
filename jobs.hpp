@@ -21,6 +21,7 @@ struct TraceTileJob {
 	std::size_t totalRayCasts;
 	std::size_t maxPathLength;
 	bool pathCapture;
+	bool nonZeroContribution;
 	std::vector<light::Vector> vertices;
 
 	TraceTileJob(std::size_t sr, std::size_t sc,
@@ -32,7 +33,8 @@ struct TraceTileJob {
                   rngState({0, 0}),
 									totalRayCasts(0),
 									maxPathLength(0),
-									pathCapture(false)
+									pathCapture(false),
+									nonZeroContribution(false)
 	{
 		for(auto &row: pixels) {
 			row.resize(endCol - startCol, light::Vector(0, 0, 0));

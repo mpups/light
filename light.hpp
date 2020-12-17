@@ -128,7 +128,7 @@ struct Sphere : public Object {
 		return t0;
 	}
 
-	Vector normal(const Vector& point) const {
+	Vector normal(const Vector& point) const override {
 		return (point - centre).normalized();
 	}
 };
@@ -138,11 +138,6 @@ struct Intersection {
 	float t;
 	Intersection() : object(nullptr), t(std::numeric_limits<float>::infinity()) {}
 	Intersection(const Object* const o, float t) : object(o), t(t) {}
-  Intersection& operator = (const Intersection& other) {
-    object = other.object;
-    t = other.t;
-    return *this;
-  }
 	operator bool() { return object != nullptr; }
 };
 

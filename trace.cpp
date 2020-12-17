@@ -104,7 +104,6 @@ struct RayDebug {
 void onMouseClick(int event, int x, int y, int, void* data) {
 	RayDebug& debug = *reinterpret_cast<RayDebug*>(data);
 	if  (event == cv::EVENT_LBUTTONDOWN) {
-		//std::cerr <<  "\n" << x << " " << y << " " << flags << "\n";
 		debug.row = y;
 		debug.col = x;
 		debug.enabled = true;
@@ -121,23 +120,31 @@ void drawDebugRays(const RayDebug& debug, const light::RayTracerContext& tracer,
 	debugJob.pathCapture = true;
 	debugJob.rngState = rngState;
 	Vector cam = pixelToRay(debug.col, debug.row, image.cols, image.rows);
-	Ray ray(Vector(0, 0, 0), cam);
-	trace(ray, tracer, debugJob);
+	const Ray ray(Vector(0, 0, 0), cam);
+	std::size_t maxTries = 100;
+	while (--maxTries && debugJob.nonZeroContribution == false) {
+		trace(ray, tracer, debugJob);
+	}
+	std::cerr << "Tries left: " << maxTries << "\n";
 	std::vector<Vector> pixels;
 
 	for (auto& v : debugJob.vertices) {
 		auto p = vertexToPixel(v, image.cols, image.rows);
 		pixels.push_back(p);
-		//std::cerr << "\nvertex: " << v << " projected: " << p;
 	}
-	//std::cerr << "\n";
+
+	static const std::vector<cv::Vec3b> colours = {
+		cv::Vec3b(25, 255, 255),
+		cv::Vec3b(255, 255, 25),
+		cv::Vec3b(25, 25, 255),
+		cv::Vec3b(255, 25, 255)
+	};
 
 	for (std::size_t p = 1; p < pixels.size(); ++p) {
 		auto a = cv::Point2f(pixels[p-1].x, pixels[p-1].y);
 		auto b = cv::Point2f(pixels[p].x, pixels[p].y);
-		cv::line(image, a, b, cv::Vec3b(255, 255, 0), 1.3, cv::LINE_AA);
+		cv::line(image, a, b, colours[p % 4], 2, cv::LINE_AA);
 	}
-
 }
 
 int main(int argc, char** argv) {
@@ -220,7 +227,7 @@ int main(int argc, char** argv) {
 				Vector cam = pixelToRay(col, row, width, height); // construct image plane coordinates
 				Vector aaNoise(xoshiro::rnd(job.rngState), xoshiro::rnd(job.rngState), 0.f);
 				cam += aaNoise * antiAliasingScale;
-				Ray ray(Vector(0, 0, 0), cam);
+				const Ray ray(Vector(0, 0, 0), cam);
 				auto color = trace(ray, tracer, job);
 				p += color / spp; // write the contributions
 			});
