@@ -2,7 +2,7 @@
 
 A Simple MonteCarlo ray tracer based on Smallpaint by Károly Zsolnai-Fehér: https://users.cg.tuwien.ac.at/zsolnai/gfx/smallpaint/
 
-![Example output with ray visualisation](examples/ray_overlay.png)
+![Example output with ray visualisation](images/ray_overlay.png)
 
 ### Points of Interest
 * Basic non-recursive path tracer in C++.
