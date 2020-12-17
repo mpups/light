@@ -7,7 +7,7 @@ A Simple MonteCarlo ray tracer based on Smallpaint by Károly Zsolnai-Fehér: ht
 ### Points of Interest
 * Basic non-recursive path tracer in C++.
 * Uses OpenMP for multi-core rendering.
-* Uses xorshiro random number generator for sampling: faster than C++'s Mersenne Twister.
+* Uses [xoshiro](http://prng.di.unimi.it) random number generator for sampling: faster than C++'s Mersenne Twister.
 * Uses OpenCV for a basic preview window/GUI.
 
 ## Build and Usage Instructions
