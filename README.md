@@ -1,6 +1,6 @@
 # light
 
-A Simple MonteCarlo ray tracer based on Smallpaint by Károly Zsolnai-Fehér: https://users.cg.tuwien.ac.at/zsolnai/gfx/smallpaint/
+A Simple Monte Carlo ray tracer based on Smallpaint by Károly Zsolnai-Fehér: https://users.cg.tuwien.ac.at/zsolnai/gfx/smallpaint/
 
 ![Example output with ray visualisation](images/ray_overlay.png)
 
@@ -20,10 +20,10 @@ mkdir build
 cd build
 cmake ../ -G Ninja
 ninja
-./light --outfile image.png
+./trace --outfile image.png
 ```
 
-For a full description of options: `./light --help`
+For a full description of options: `./trace --help`
 
 ## Output Format
 

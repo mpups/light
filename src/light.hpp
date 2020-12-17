@@ -112,12 +112,13 @@ struct Sphere : public Object {
   virtual ~Sphere() {}
 
 	float intersect(const Ray& ray) const override {
-		Vector L = centre - ray.origin;
-		auto tca = L.dot(ray.direction);
+		Vector f = centre - ray.origin;
+		auto tca = f.dot(ray.direction);
 		if (tca < 0.f) { return 0.f; }
-		auto d2 = L.squaredNorm() - (tca * tca);
-		if (d2 > radius2) { return 0.f; }
-		auto thc = sqrtf(radius2 - d2);
+		Vector l = centre - (ray.origin + (ray.direction * tca));
+		auto l2 = l.squaredNorm();
+		if (l2 > radius2) { return 0.f; }
+		auto thc = sqrtf(radius2 - l2);
 		auto t0 = tca - thc;
 		auto t1 = tca + thc;
 		if (t0 > t1) { std::swap(t0, t1); }
