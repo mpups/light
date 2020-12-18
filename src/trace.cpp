@@ -194,7 +194,7 @@ int main(int argc, char** argv) {
 	Vector light2(500, 600, 1000);
 	add(new Sphere(Vector(-1.12,-2.3,-3.5), 0.2f), Vector(100,200,100), light2, Material::specular); // Small ball light
 
-	light::Image pixels(height);
+	Image pixels(height);
 	for(auto &row: pixels) {
 		row.resize(width, Vector(0, 0, 0));
 	}

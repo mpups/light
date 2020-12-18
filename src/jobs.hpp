@@ -3,6 +3,8 @@
 #include "light.hpp"
 #include "xoshiro.hpp"
 
+using Image = std::vector<std::vector<light::Vector>>;
+
 struct Generators {
 	Generators(xoshiro::State& state)
 		: rng(state) {}
@@ -16,7 +18,7 @@ struct TraceTileJob {
 	std::size_t startCol;
 	std::size_t endCol;
 	std::size_t spp;
-	light::Image pixels;
+	Image pixels;
 	xoshiro::State rngState;
 	std::size_t totalRayCasts;
 	std::size_t maxPathLength;
@@ -84,7 +86,7 @@ std::vector<TraceTileJob> createTracingJobs(std::size_t imageWidth, std::size_t 
 	return jobs;
 }
 
-void accumulateTraceJobResults(std::vector<TraceTileJob>& jobs, light::Image& image) {
+void accumulateTraceJobResults(std::vector<TraceTileJob>& jobs, Image& image) {
 	for (auto& j : jobs) {
 		j.visitPixels([&] (std::size_t r, std::size_t c, light::Vector& p) {
 			image[r][c] += p;

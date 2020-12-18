@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstdlib>
-#include <vector>
+#include <array>
 #include <array>
 #include <limits>
 #include <memory>
@@ -12,6 +12,7 @@
 
 namespace light {
 
+static constexpr float Pi = 3.14159265358979323846264338327950288f;
 extern float epsilon;
 extern float intersectionEpsilon;
 
@@ -50,7 +51,7 @@ struct Object {
 		type = m;
   }
 
-  virtual ~Object() {}
+  ~Object() {}
 
 	virtual Vector normal(const Vector&) const = 0;
   virtual float intersect(const Ray&) const = 0;
@@ -60,7 +61,7 @@ struct Plane : public Object {
 	Vector n;
 	float d;
 	Plane(const Vector& normal, float offset) : n(normal.normalized()), d(offset) {}
-  virtual ~Plane() {}
+  ~Plane() {}
 
 	virtual Vector normal(const Vector&) const override { return n; }
 
@@ -82,7 +83,7 @@ struct Disc : public Object {
 	float r2;
 	Disc(const Vector& normal, const Vector& centre, float radius)
 		: n(normal.normalized()), c(centre), d(std::abs(centre.dot(n))), r2(radius*radius) {}
-  virtual ~Disc() {}
+  ~Disc() {}
 
 	virtual Vector normal(const Vector&) const override { return n; }
 
@@ -109,7 +110,7 @@ struct Sphere : public Object {
 	const float radius2;
 
 	Sphere(Vector c, float r) : centre(c), radius(r), radius2(r*r) {}
-  virtual ~Sphere() {}
+	~Sphere() {}
 
 	float intersect(const Ray& ray) const override {
 		Vector f = centre - ray.origin;
@@ -144,22 +145,26 @@ struct Intersection {
 
 struct Scene {
 	Scene() {}
-	virtual ~Scene() {}
+	~Scene() {}
 	Scene(const Scene&) = delete;
 
-	std::vector<std::unique_ptr<Object>> objects;
+	static constexpr std::size_t capacity = 16;
+	std::size_t last = 0;
+	std::array<Object*, capacity> objects;
 
 	void add(Object* object) {
-		objects.emplace_back(object);
+		objects[last] = object;
+		last += 1;
 	}
 
 	Intersection intersect(const Ray& ray) const {
 		Intersection closestIntersection;
     // Dumb linear search:
-		for (const auto& o: objects) {
+		for (std::size_t i = 0; i < last; ++i) {
+			const auto& o = objects[i];
 			auto t = o->intersect(ray);
 			if (t > intersectionEpsilon && t < closestIntersection.t) {
-				closestIntersection = Intersection(o.get(), t);
+				closestIntersection = Intersection(o, t);
 			}
 		}
 		return closestIntersection;
@@ -170,7 +175,7 @@ inline
 Vector pixelToRay(float x, float y, std::uint32_t width, std::uint32_t height) {
 	float w = width;
 	float h = height;
-	float fovx = M_PI/4;
+	float fovx = Pi/4;
 	float fovy = (h/w) * fovx;
 	auto tanfovx = tan(fovx);
 	auto tanfovy = tan(fovy);
@@ -183,7 +188,7 @@ inline
 Vector vertexToPixel(Vector v, std::uint32_t width, std::uint32_t height) {
 	float w = width;
 	float h = height;
-	float fovx = M_PI/4;
+	float fovx = Pi/4;
 	float fovy = (h/w) * fovx;
 	auto tanfovx = tan(fovx);
 	auto tanfovy = tan(fovy);
@@ -197,7 +202,7 @@ Vector vertexToPixel(Vector v, std::uint32_t width, std::uint32_t height) {
 inline
 Vector hemisphere(float u1, float u2) {
 	const float r = sqrtf(1.f - u1*u1);
-	const float phi = 2 * M_PI * u2;
+	const float phi = 2 * Pi * u2;
 	return Vector(cos(phi)*r, sin(phi)*r, u1);
 }
 
@@ -245,7 +250,5 @@ struct Contribution {
 	float weight;
 	Type type;
 };
-
-using Image = std::vector<std::vector<light::Vector>>;
 
 } // end namespace light

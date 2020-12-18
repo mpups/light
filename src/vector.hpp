@@ -1,5 +1,13 @@
+#pragma once
+
+#include <cmath>
+
+#ifdef __POPC__
+#undef USE_EIGEN
+#else
 #include <Eigen/Dense>
 #include <iostream>
+#endif
 
 namespace light {
 
@@ -34,7 +42,7 @@ struct Vector {
 	Vector cwiseProduct(const Vector &b) const {
 		return Vector(x*b.x, y*b.y, z*b.z);
 	}
-  Vector normalized() const { return *this * (1.f/sqrt(x*x + y*y + z*z)); }
+	Vector normalized() const { return *this * (1.f/std::sqrt(x*x + y*y + z*z)); }
 	float squaredNorm() const { return x*x + y*y + z*z; }
 	float norm() const { return std::sqrt(squaredNorm()); }
 	float dot(const Vector &b) const { return x*b.x + y*b.y + z*b.z; }
@@ -52,10 +60,12 @@ struct Vector {
 
 } // end namespace light
 
+#ifndef __POPC__
 #ifndef USE_EIGEN
 inline
 std::ostream& operator << (std::ostream &os, const light::Vector &v) {
     os << v.x << " " << v.y << " " << v.z;
     return os;
 }
+#endif
 #endif
