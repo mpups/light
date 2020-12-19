@@ -2,7 +2,6 @@
 
 #include <cstdlib>
 #include <array>
-#include <array>
 #include <limits>
 #include <memory>
 #include <cmath>
@@ -13,8 +12,13 @@
 namespace light {
 
 static constexpr float Pi = 3.14159265358979323846264338327950288f;
+#ifdef __POPC__
+static constexpr float epsilon = std::numeric_limits<float>::epsilon();
+static constexpr float intersectionEpsilon = 1e-5;
+#else
 extern float epsilon;
 extern float intersectionEpsilon;
+#endif
 
 struct Ray {
 	Vector origin;
@@ -39,6 +43,7 @@ struct Object {
   Object() :
 		colour(0.f, 0.f, 0.f), emission(0.f, 0.f, 0.f),
 		type(Material::diffuse), emissive(false) {}
+  ~Object() {}
 
 	void setMaterial(Vector c, Vector e, Material m) {
     colour = c;
@@ -50,8 +55,6 @@ struct Object {
 		}
 		type = m;
   }
-
-  ~Object() {}
 
 	virtual Vector normal(const Vector&) const = 0;
   virtual float intersect(const Ray&) const = 0;
@@ -112,7 +115,7 @@ struct Sphere : public Object {
 	Sphere(Vector c, float r) : centre(c), radius(r), radius2(r*r) {}
 	~Sphere() {}
 
-	float intersect(const Ray& ray) const override {
+	virtual float intersect(const Ray& ray) const override {
 		Vector f = centre - ray.origin;
 		auto tca = f.dot(ray.direction);
 		if (tca < 0.f) { return 0.f; }
@@ -130,7 +133,7 @@ struct Sphere : public Object {
 		return t0;
 	}
 
-	Vector normal(const Vector& point) const override {
+	virtual Vector normal(const Vector& point) const override {
 		return (point - centre).normalized();
 	}
 };
@@ -161,7 +164,7 @@ struct Scene {
 		Intersection closestIntersection;
     // Dumb linear search:
 		for (std::size_t i = 0; i < last; ++i) {
-			const auto& o = objects[i];
+			auto o = objects[i];
 			auto t = o->intersect(ray);
 			if (t > intersectionEpsilon && t < closestIntersection.t) {
 				closestIntersection = Intersection(o, t);

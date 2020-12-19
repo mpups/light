@@ -64,12 +64,12 @@ inline double to_double(uint64_t x) {
 }
 
 // Uniform [-1..1)
-inline float rnd(State& rngState) {
+inline float uniform_neg1_1(State& rngState) {
 	return 2.0*to_double(next128ss(rngState)) - 1.0;
 }
 
 // Uniform [0..1)
-inline float rnd2(State& rngState) {
+inline float uniform_0_1(State& rngState) {
 	return to_double(next128ss(rngState));
 }
 

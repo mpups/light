@@ -1,0 +1,7 @@
+outfile : image.png 
+width : 800 
+height : 800 
+samples : 1000000 
+stop-prob : 0.2 
+roulette-depth : 2 
+no-gui : 

@@ -16,9 +16,13 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O3 -ffast-math -ffinite-math-only -fno-math-errno 
 include_directories(${Boost_INCLUDE_DIRS} ${OpenCV_INCLUDE_DIRS})
 #add_definitions(-DUSE_EIGEN)
 
-add_library(exr src/exr.hpp src/exr.cpp)
+file(GLOB EXR_SRC ${PROJECT_SOURCE_DIR}/src/exr/*.hpp ${PROJECT_SOURCE_DIR}/src/exr/*.cpp)
+
+add_library(exr ${EXR_SRC})
 link_directories(/usr/local/lib)
 target_link_libraries(exr OpenMP::OpenMP_CXX IlmImf)
 
-add_executable(trace src/trace.cpp src/light.cpp)
+file(GLOB TRACE_SRC ${PROJECT_SOURCE_DIR}/src/*.hpp ${PROJECT_SOURCE_DIR}/src/*.cpp)
+
+add_executable(trace ${TRACE_SRC})
 target_link_libraries(trace Eigen3::Eigen Boost::program_options OpenMP::OpenMP_CXX ${OpenCV_LIBS} exr)

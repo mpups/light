@@ -10,7 +10,7 @@
 #include <opencv2/imgproc.hpp>
 
 #include "trace.hpp"
-#include "exr.hpp"
+#include "exr/exr.hpp"
 
 boost::program_options::variables_map
 getArgs(int argc, char** argv) {
@@ -225,7 +225,7 @@ int main(int argc, char** argv) {
 			auto& job = jobs[j];
 			job.visitPixels([&] (std::size_t row, std::size_t col, light::Vector& p) {
 				Vector cam = pixelToRay(col, row, width, height); // construct image plane coordinates
-				Vector aaNoise(xoshiro::rnd(job.rngState), xoshiro::rnd(job.rngState), 0.f);
+				Vector aaNoise(xoshiro::uniform_neg1_1(job.rngState), xoshiro::uniform_neg1_1(job.rngState), 0.f);
 				cam += aaNoise * antiAliasingScale;
 				const Ray ray(Vector(0, 0, 0), cam);
 				auto color = trace(ray, tracer, job);
