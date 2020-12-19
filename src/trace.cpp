@@ -152,14 +152,34 @@ int main(int argc, char** argv) {
 
   using namespace light;
 
-	light::Scene scene;
-	light::RayTracerContext tracer(scene);
+	Vector zero(0, 0, 0);
+  const auto X = Vector(1, 0, 0);
+  const auto Y = Vector(0, 1, 0);
+  const auto Z = Vector(0, 0, 1);
+	Vector light1(10000, 5950, 4370);
+	Vector light2(500, 600, 1000);
+
+	Scene scene({
+		ObjectSpec{new Sphere(Vector(-0.75,-1.45,-4.4), 1.05), Vector(4,8,4), zero, Material::specular},
+		ObjectSpec{new Sphere(Vector(2.0,-2.05,-3.7), 0.5), Vector(10,10,1), zero, Material::refractive}, // Glass sphere
+		ObjectSpec{new Sphere(Vector(-1.75,-1.95,-3.1), 0.6), Vector(4,4,12), zero, Material::diffuse}, // Diffuse sphere
+		ObjectSpec{new Plane(Y, 2.5), Vector(6,6,6), zero, Material::diffuse}, // Bottom plane
+		ObjectSpec{new Plane(Z, 5.5), Vector(6,6,6), zero, Material::diffuse}, // Back plane
+		ObjectSpec{new Plane(X, 2.75), Vector(10,2,2), zero, Material::diffuse}, // Left plane
+		ObjectSpec{new Plane(-X, 2.75), Vector(2,10,2), zero, Material::diffuse}, // Right plane
+		ObjectSpec{new Plane(-Y, 3.0), Vector(6,6,6), zero, Material::diffuse}, // Ceiling plane
+		ObjectSpec{new Plane(-Z, 0.5), Vector(6,6,6), zero, Material::diffuse}, // Front plane
+		ObjectSpec{new Disc(-Y, Vector(0, 2.9999, -4), 0.7), Vector(0,0,0), light1, Material::diffuse}, // Ceiling light
+		ObjectSpec{new Sphere(Vector(-1.12,-2.3,-3.5), 0.2f), Vector(100,200,100), light2, Material::specular} // Small ball light
+	});
+
+	RayTracerContext tracer(scene);
+
   tracer.refractiveIndex = args.at("refractive-index").as<float>();
 	tracer.rouletteDepth = args.at("roulette-depth").as<float>();
 	tracer.stopProb = args.at("stop-prob").as<float>();
-  light::epsilon = args.at("epsilon").as<float>();
-	light::intersectionEpsilon = args.at("intersection-epsilon").as<float>();
-
+  epsilon = args.at("epsilon").as<float>();
+	intersectionEpsilon = args.at("intersection-epsilon").as<float>();
   const auto fileName = args.at("outfile").as<std::string>();
   const auto width = args.at("width").as<std::uint32_t>();
   const auto height = args.at("height").as<std::uint32_t>();
@@ -168,31 +188,6 @@ int main(int argc, char** argv) {
 	const auto spp = args.at("samples").as<std::uint32_t>();
 	const auto antiAliasingScale = args.at("aa-noise-scale").as<float>();
 	const auto gui = !args.count("no-gui");
-
-	auto add = [&](Object* o, Vector cl, Vector emission, Material type) {
-			o->setMaterial(cl, emission, type);
-			scene.add(o);
-	};
-
-	Vector zero(0, 0, 0);
-	// Radius, position, color, emission, type (1=diff, 2=spec, 3=refr) for spheres
-	add(new Sphere(Vector(-0.75,-1.45,-4.4), 1.05), Vector(4,8,4), zero, Material::specular); // Mirror sphere
-	add(new Sphere(Vector(2.0,-2.05,-3.7), 0.5), Vector(10,10,1), zero, Material::refractive); // Glass sphere
-	add(new Sphere(Vector(-1.75,-1.95,-3.1), 0.6), Vector(4,4,12), zero, Material::diffuse); // Diffuse sphere
-	// Position, normal, color, emission, type for planes
-  const auto X = Vector(1, 0, 0);
-  const auto Y = Vector(0, 1, 0);
-  const auto Z = Vector(0, 0, 1);
-	add(new Plane(Y, 2.5), Vector(6,6,6), zero, Material::diffuse); // Bottom plane
-	add(new Plane(Z, 5.5), Vector(6,6,6), zero, Material::diffuse); // Back plane
-	add(new Plane(X, 2.75), Vector(10,2,2), zero, Material::diffuse); // Left plane
-	add(new Plane(-X, 2.75), Vector(2,10,2), zero, Material::diffuse); // Right plane
-	add(new Plane(-Y, 3.0), Vector(6,6,6), zero, Material::diffuse); // Ceiling plane
-	add(new Plane(-Z, 0.5), Vector(6,6,6), zero, Material::diffuse); // Front plane
-	Vector light1(10000, 5950, 4370);
-	add(new Disc(-Y, Vector(0, 2.9999, -4), 0.7), Vector(0,0,0), light1, Material::diffuse); // Ceiling light
-	Vector light2(500, 600, 1000);
-	add(new Sphere(Vector(-1.12,-2.3,-3.5), 0.2f), Vector(100,200,100), light2, Material::specular); // Small ball light
 
 	Image pixels(height);
 	for(auto &row: pixels) {
@@ -223,7 +218,7 @@ int main(int argc, char** argv) {
 		#pragma omp parallel for schedule(dynamic)
 		for (std::size_t j = 0; j < jobs.size(); ++j) {
 			auto& job = jobs[j];
-			job.visitPixels([&] (std::size_t row, std::size_t col, light::Vector& p) {
+			job.visitPixels([&] (std::size_t row, std::size_t col, Vector& p) {
 				Vector cam = pixelToRay(col, row, width, height); // construct image plane coordinates
 				Vector aaNoise(xoshiro::uniform_neg1_1(job.rngState), xoshiro::uniform_neg1_1(job.rngState), 0.f);
 				cam += aaNoise * antiAliasingScale;

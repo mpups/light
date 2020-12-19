@@ -56,8 +56,9 @@ struct Object {
 		type = m;
   }
 
-	virtual Vector normal(const Vector&) const = 0;
-  virtual float intersect(const Ray&) const = 0;
+	static constexpr float nan = std::numeric_limits<float>::quiet_NaN();
+	virtual Vector normal(const Vector&) const { return Vector(nan, nan, nan); }
+  virtual float intersect(const Ray&) const { return nan;}
 };
 
 struct Plane : public Object {
@@ -146,25 +147,29 @@ struct Intersection {
 	operator bool() { return object != nullptr; }
 };
 
+struct ObjectSpec {
+	Object* object;
+	Vector colour;
+	Vector emission;
+	Material type;
+};
+
 struct Scene {
-	Scene() {}
+	Scene(std::array<ObjectSpec, 11> o) : objects(o) {
+		for (auto& s : objects) {
+			s.object->setMaterial(s.colour, s.emission, s.type);
+		}
+	}
 	~Scene() {}
 	Scene(const Scene&) = delete;
 
-	static constexpr std::size_t capacity = 16;
-	std::size_t last = 0;
-	std::array<Object*, capacity> objects;
-
-	void add(Object* object) {
-		objects[last] = object;
-		last += 1;
-	}
+	std::array<ObjectSpec, 11> objects;
 
 	Intersection intersect(const Ray& ray) const {
 		Intersection closestIntersection;
     // Dumb linear search:
-		for (std::size_t i = 0; i < last; ++i) {
-			auto o = objects[i];
+		for (std::size_t i = 0; i < objects.max_size(); ++i) {
+			auto o = objects[i].object;
 			auto t = o->intersect(ray);
 			if (t > intersectionEpsilon && t < closestIntersection.t) {
 				closestIntersection = Intersection(o, t);
