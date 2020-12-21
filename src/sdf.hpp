@@ -2,6 +2,8 @@
 
 #include "light.hpp"
 
+namespace light {
+
 // Diffuse BRDF - choose an outgoing direction with hemisphere sampling.
 light::Contribution diffuse(light::Ray& ray, light::Vector normal,
 										 const light::Intersection& intersection, float rrFactor,
@@ -56,3 +58,5 @@ void refract(light::Ray& ray, light::Vector normal,
 		ray.direction = (ray.direction+normal*(cost1*2)).normalized();
 	}
 }
+
+} // end namespace light

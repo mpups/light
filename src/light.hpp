@@ -21,6 +21,12 @@ extern float epsilon;
 extern float intersectionEpsilon;
 #endif
 
+inline
+std::pair<bool, float> rouletteWeight(float rnd1, const float stopProb) {
+	if (rnd1 <= stopProb) { return std::make_pair(true, 1.0); }
+	return std::make_pair(false, 1.0 / (1.0 - stopProb));
+}
+
 struct Ray {
 	Vector origin;
   Vector direction;
@@ -156,14 +162,12 @@ struct Sphere {
 };
 
 struct Intersection {
-	using NormalCallback = std::function<Vector(Vector)>;
-
-	std::function<Vector(const Vector&)> normal;
 	Material* material;
+	Vector normal;
 	float t;
 	bool valid;
 	Intersection() : t(std::numeric_limits<float>::infinity()), valid(false) {}
-	Intersection(NormalCallback&& n, Material* m, float t) : normal(n), material(m), t(t), valid(true) {}
+	Intersection(Material* m, float t) : material(m), t(t), valid(true) {}
 	operator bool() { return valid; }
 };
 
@@ -198,34 +202,48 @@ struct Scene {
 	std::array<Object<Plane>, 6> planes;
 	std::array<Object<Disc>, 1> discs;
 
-	Intersection intersect(const Ray& ray) const {
+	Intersection intersect(Ray& ray) const {
 		Intersection closestIntersection;
+		std::pair<std::size_t, std::size_t> closestObjectIndices;
 
-		for (auto& o : spheres) {
-			auto t = o.object->intersect(ray);
+		for (auto i = 0u; i < spheres.size(); ++i) {
+			auto& o = *spheres[i].object;
+			auto t = o.intersect(ray);
 			if (t > intersectionEpsilon && t < closestIntersection.t) {
-				closestIntersection = Intersection(
-					std::bind(&Sphere::normal, o.object, std::placeholders::_1),
-					&o.object->material,
-					t);
+				closestIntersection = Intersection(&o.material, t);
+				closestObjectIndices = std::make_pair(0, i);
 			}
 		}
-		for (auto& o : planes) {
-			auto t = o.object->intersect(ray);
+
+		for (auto i = 0u; i < planes.size(); ++i) {
+			auto& o = *planes[i].object;
+			auto t = o.intersect(ray);
 			if (t > intersectionEpsilon && t < closestIntersection.t) {
-				closestIntersection = Intersection(
-					std::bind(&Plane::normal, o.object, std::placeholders::_1),
-					&o.object->material,
-					t);
+				closestIntersection = Intersection(&o.material, t);
+				closestObjectIndices = std::make_pair(1, i);
 			}
 		}
-		for (auto& o : discs) {
-			auto t = o.object->intersect(ray);
+
+		for (auto i = 0u; i < discs.size(); ++i) {
+			auto& o = *discs[i].object;
+			auto t = o.intersect(ray);
 			if (t > intersectionEpsilon && t < closestIntersection.t) {
-				closestIntersection = Intersection(
-					std::bind(&Disc::normal, o.object, std::placeholders::_1),
-					&o.object->material,
-					t);
+				closestIntersection = Intersection(&o.material, t);
+				closestObjectIndices = std::make_pair(2, i);
+			}
+		}
+
+		if (std::isfinite(closestIntersection.t)) {
+			// Step the ray and compute the normal:
+			ray.origin += ray.direction * closestIntersection.t;
+			const std::size_t objType = closestObjectIndices.first;
+			const std::size_t objIndex = closestObjectIndices.second;
+			if (objType == 0) {
+				closestIntersection.normal = spheres[objIndex].object->normal(ray.origin);
+			} else if (objType == 1) {
+				closestIntersection.normal = planes[objIndex].object->normal(ray.origin);
+			} else if (objType == 2) {
+				closestIntersection.normal = discs[objIndex].object->normal(ray.origin);
 			}
 		}
 

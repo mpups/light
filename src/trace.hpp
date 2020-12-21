@@ -5,12 +5,6 @@
 #include "xoshiro.hpp"
 #include "sdf.hpp"
 
-inline
-std::pair<bool, float> rouletteWeight(float rnd1, const float stopProb) {
-	if (rnd1 <= stopProb) { return std::make_pair(true, 1.0); }
-	return std::make_pair(false, 1.0 / (1.0 - stopProb));
-}
-
 light::Vector trace(const light::Ray& cameraRay, const light::RayTracerContext& tracer, TraceTileJob& job) {
 	using namespace light;
 	static const Vector zero(0, 0, 0);
@@ -38,12 +32,9 @@ light::Vector trace(const light::Ray& cameraRay, const light::RayTracerContext& 
 			if (stop) { break; }
 		}
 
+		// Compute hit point and advance the ray to the intersection:
 		Intersection intersection = tracer.scene.intersect(ray);
 		if (!intersection) { break; }
-
-		// Compute hit point and surface normal there:
-		ray.origin += ray.direction * intersection.t;
-		Vector normal = intersection.normal(ray.origin);
 
 		if (job.pathCapture) {
 			job.vertices.push_back(ray.origin);
@@ -57,14 +48,14 @@ light::Vector trace(const light::Ray& cameraRay, const light::RayTracerContext& 
 		if (intersection.material->type == Material::Type::diffuse) {
 			const auto rnd1 = xoshiro::uniform_0_1(gen.rng);
 			const auto rnd2 = xoshiro::uniform_0_1(gen.rng);
-			const auto result = diffuse(ray, normal, intersection, rrFactor, rnd1, rnd2);
+			const auto result = diffuse(ray, intersection.normal, intersection, rrFactor, rnd1, rnd2);
 			contributions.push_back(result);
 		} else if (intersection.material->type == Material::Type::specular) {
-			reflect(ray, normal);
+			reflect(ray, intersection.normal);
 			contributions.push_back({zero, rrFactor, Contribution::Type::SPECULAR});
 		} else if (intersection.material->type == Material::Type::refractive) {
 			const auto rnd1 = xoshiro::uniform_0_1(gen.rng);
-			refract(ray, normal, tracer, rnd1);
+			refract(ray, intersection.normal, tracer, rnd1);
 			contributions.push_back({zero, 1.15f * rrFactor, Contribution::Type::REFLECT});
 		}
 
