@@ -62,30 +62,15 @@ struct Material {
 	bool emissive;
 };
 
-struct Primitive {
-	Material material;
-
-  Primitive() {}
-  ~Primitive() {}
-
-	void setMaterial(Vector c, Vector e, Material::Type m) {
-		material = Material(c, e, m);
-  }
-
-	static constexpr float nan = std::numeric_limits<float>::quiet_NaN();
-	virtual Vector normal(const Vector&) const { return Vector(nan, nan, nan); }
-  virtual float intersect(const Ray&) const { return nan;}
-};
-
-struct Plane : public Primitive {
+struct Plane {
 	Vector n;
 	float d;
 	Plane(const Vector& normal, float offset) : n(normal.normalized()), d(offset) {}
   ~Plane() {}
 
-	virtual Vector normal(const Vector&) const override { return n; }
+	Vector normal(const Vector&) const { return n; }
 
-	virtual float intersect(const Ray& ray) const override {
+	float intersect(const Ray& ray) const {
 		auto angle = n.dot(ray.direction);
 		if (angle != 0.f) {
 			auto t = -((n.dot(ray.origin)) + d) / angle;
@@ -94,9 +79,14 @@ struct Plane : public Primitive {
 
 		return 0.f;
 	}
+
+	Material material;
+	void setMaterial(Vector c, Vector e, Material::Type m) {
+		material = Material(c, e, m);
+  }
 };
 
-struct Disc : public Primitive {
+struct Disc {
 	Vector n;
 	Vector c;
 	float d;
@@ -105,9 +95,9 @@ struct Disc : public Primitive {
 		: n(normal.normalized()), c(centre), d(std::abs(centre.dot(n))), r2(radius*radius) {}
   ~Disc() {}
 
-	virtual Vector normal(const Vector&) const override { return n; }
+	Vector normal(const Vector&) const { return n; }
 
-	virtual float intersect(const Ray& ray) const override {
+	float intersect(const Ray& ray) const {
 		auto angle = n.dot(ray.direction);
 		if (angle != 0.f) {
 			auto t = -((n.dot(ray.origin)) + d) / angle;
@@ -122,9 +112,14 @@ struct Disc : public Primitive {
 
 		return 0.f;
 	}
+
+	Material material;
+	void setMaterial(Vector c, Vector e, Material::Type m) {
+		material = Material(c, e, m);
+  }
 };
 
-struct Sphere : public Primitive {
+struct Sphere {
 	const Vector centre;
 	const float radius;
 	const float radius2;
@@ -132,7 +127,7 @@ struct Sphere : public Primitive {
 	Sphere(Vector c, float r) : centre(c), radius(r), radius2(r*r) {}
 	~Sphere() {}
 
-	virtual float intersect(const Ray& ray) const override {
+	float intersect(const Ray& ray) const {
 		Vector f = centre - ray.origin;
 		auto tca = f.dot(ray.direction);
 		if (tca < 0.f) { return 0.f; }
@@ -150,9 +145,14 @@ struct Sphere : public Primitive {
 		return t0;
 	}
 
-	virtual Vector normal(const Vector& point) const override {
+	Vector normal(const Vector& point) const {
 		return (point - centre).normalized();
 	}
+
+	Material material;
+	void setMaterial(Vector c, Vector e, Material::Type m) {
+		material = Material(c, e, m);
+  }
 };
 
 struct Intersection {
