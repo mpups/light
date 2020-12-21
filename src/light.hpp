@@ -6,6 +6,7 @@
 #include <memory>
 #include <cmath>
 #include <tuple>
+#include <functional>
 
 #include "vector.hpp"
 
@@ -74,46 +75,6 @@ struct Primitive {
 	static constexpr float nan = std::numeric_limits<float>::quiet_NaN();
 	virtual Vector normal(const Vector&) const { return Vector(nan, nan, nan); }
   virtual float intersect(const Ray&) const { return nan;}
-};
-
-struct Intersection {
-	const Primitive* object;
-	float t;
-	Intersection() : object(nullptr), t(std::numeric_limits<float>::infinity()) {}
-	Intersection(const Primitive* const o, float t) : object(o), t(t) {}
-	operator bool() { return object != nullptr; }
-};
-
-struct Object {
-	Primitive* object;
-	Vector colour;
-	Vector emission;
-	Material::Type type;
-};
-
-struct Scene {
-	Scene(std::array<Object, 11> o) : objects(o) {
-		for (auto& s : objects) {
-			s.object->setMaterial(s.colour, s.emission, s.type);
-		}
-	}
-	~Scene() {}
-	Scene(const Scene&) = delete;
-
-	std::array<Object, 11> objects;
-
-	Intersection intersect(const Ray& ray) const {
-		Intersection closestIntersection;
-    // Dumb linear search:
-		for (std::size_t i = 0; i < objects.max_size(); ++i) {
-			auto o = objects[i].object;
-			auto t = o->intersect(ray);
-			if (t > intersectionEpsilon && t < closestIntersection.t) {
-				closestIntersection = Intersection(o, t);
-			}
-		}
-		return closestIntersection;
-	}
 };
 
 struct Plane : public Primitive {
@@ -191,6 +152,84 @@ struct Sphere : public Primitive {
 
 	virtual Vector normal(const Vector& point) const override {
 		return (point - centre).normalized();
+	}
+};
+
+struct Intersection {
+	using NormalCallback = std::function<Vector(Vector)>;
+
+	std::function<Vector(const Vector&)> normal;
+	Material* material;
+	float t;
+	bool valid;
+	Intersection() : t(std::numeric_limits<float>::infinity()), valid(false) {}
+	Intersection(NormalCallback&& n, Material* m, float t) : normal(n), material(m), t(t), valid(true) {}
+	operator bool() { return valid; }
+};
+
+template <class T>
+struct Object {
+	T* object;
+	Vector colour;
+	Vector emission;
+	Material::Type type;
+};
+
+struct Scene {
+	Scene(
+		std::array<Object<Sphere>, 4> sph,
+		std::array<Object<Plane>, 6> pln,
+		std::array<Object<Disc>, 1> dsc
+	) : spheres(sph), planes(pln), discs(dsc) {
+		for (auto& s : spheres) {
+			s.object->setMaterial(s.colour, s.emission, s.type);
+		}
+		for (auto& p : planes) {
+			p.object->setMaterial(p.colour, p.emission, p.type);
+		}
+		for (auto& d : discs) {
+			d.object->setMaterial(d.colour, d.emission, d.type);
+		}
+	}
+	~Scene() {}
+	Scene(const Scene&) = delete;
+
+	std::array<Object<Sphere>, 4> spheres;
+	std::array<Object<Plane>, 6> planes;
+	std::array<Object<Disc>, 1> discs;
+
+	Intersection intersect(const Ray& ray) const {
+		Intersection closestIntersection;
+
+		for (auto& o : spheres) {
+			auto t = o.object->intersect(ray);
+			if (t > intersectionEpsilon && t < closestIntersection.t) {
+				closestIntersection = Intersection(
+					std::bind(&Sphere::normal, o.object, std::placeholders::_1),
+					&o.object->material,
+					t);
+			}
+		}
+		for (auto& o : planes) {
+			auto t = o.object->intersect(ray);
+			if (t > intersectionEpsilon && t < closestIntersection.t) {
+				closestIntersection = Intersection(
+					std::bind(&Plane::normal, o.object, std::placeholders::_1),
+					&o.object->material,
+					t);
+			}
+		}
+		for (auto& o : discs) {
+			auto t = o.object->intersect(ray);
+			if (t > intersectionEpsilon && t < closestIntersection.t) {
+				closestIntersection = Intersection(
+					std::bind(&Disc::normal, o.object, std::placeholders::_1),
+					&o.object->material,
+					t);
+			}
+		}
+
+		return closestIntersection;
 	}
 };
 

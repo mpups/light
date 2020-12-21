@@ -24,7 +24,7 @@ light::Contribution diffuse(light::Ray& ray, light::Vector normal,
 #endif
 
 	float weight = ray.direction.dot(normal) * .1f * rrFactor;
-	return Contribution{intersection.object->material.colour, weight, Contribution::Type::DIFFUSE};
+	return Contribution{intersection.material->colour, weight, Contribution::Type::DIFFUSE};
 }
 
 // Specular BRDF - this is a singularity in the rendering equation that follows

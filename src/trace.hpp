@@ -43,26 +43,26 @@ light::Vector trace(const light::Ray& cameraRay, const light::RayTracerContext& 
 
 		// Compute hit point and surface normal there:
 		ray.origin += ray.direction * intersection.t;
-		Vector normal = intersection.object->normal(ray.origin);
+		Vector normal = intersection.normal(ray.origin);
 
 		if (job.pathCapture) {
 			job.vertices.push_back(ray.origin);
 		}
 
-		if (intersection.object->material.emissive) {
-			contributions.push_back({intersection.object->material.emission, rrFactor, Contribution::Type::EMIT});
+		if (intersection.material->emissive) {
+			contributions.push_back({intersection.material->emission, rrFactor, Contribution::Type::EMIT});
 			hitEmitter = true;
 		}
 
-		if (intersection.object->material.type == Material::Type::diffuse) {
+		if (intersection.material->type == Material::Type::diffuse) {
 			const auto rnd1 = xoshiro::uniform_0_1(gen.rng);
 			const auto rnd2 = xoshiro::uniform_0_1(gen.rng);
 			const auto result = diffuse(ray, normal, intersection, rrFactor, rnd1, rnd2);
 			contributions.push_back(result);
-		} else if (intersection.object->material.type == Material::Type::specular) {
+		} else if (intersection.material->type == Material::Type::specular) {
 			reflect(ray, normal);
 			contributions.push_back({zero, rrFactor, Contribution::Type::SPECULAR});
-		} else if (intersection.object->material.type == Material::Type::refractive) {
+		} else if (intersection.material->type == Material::Type::refractive) {
 			const auto rnd1 = xoshiro::uniform_0_1(gen.rng);
 			refract(ray, normal, tracer, rnd1);
 			contributions.push_back({zero, 1.15f * rrFactor, Contribution::Type::REFLECT});
