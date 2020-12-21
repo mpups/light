@@ -30,30 +30,45 @@ struct Ray {
   }
 };
 
-enum class Material {
-  diffuse, specular, refractive
-};
+struct Material {
+	enum class Type {
+		diffuse, specular, refractive
+	};
 
-struct Object {
-	Vector colour;
-	Vector emission;
-	Material type;
-	bool emissive;
+	Material()
+	:
+		colour(0.f, 0.f, 0.f),
+		emission(0.f, 0.f, 0.f),
+		type(Material::Type::diffuse),
+		emissive(false) {}
 
-  Object() :
-		colour(0.f, 0.f, 0.f), emission(0.f, 0.f, 0.f),
-		type(Material::diffuse), emissive(false) {}
-  ~Object() {}
-
-	void setMaterial(Vector c, Vector e, Material m) {
-    colour = c;
-    emission = e;
-		if (emission.x == 0.f && emission.y == 0.f && emission.z == 0.f) {
+	Material(Vector c, Vector e, Material::Type t)
+	:
+		colour(c), emission(e), type(t)
+	{
+		if (emission.x == 0.f &&
+			  emission.y == 0.f &&
+				emission.z == 0.f) {
 			emissive = false;
 		} else {
 			emissive = true;
 		}
-		type = m;
+	}
+
+	Vector colour;
+	Vector emission;
+	Type type;
+	bool emissive;
+};
+
+struct Primitive {
+	Material material;
+
+  Primitive() {}
+  ~Primitive() {}
+
+	void setMaterial(Vector c, Vector e, Material::Type m) {
+		material = Material(c, e, m);
   }
 
 	static constexpr float nan = std::numeric_limits<float>::quiet_NaN();
@@ -61,7 +76,47 @@ struct Object {
   virtual float intersect(const Ray&) const { return nan;}
 };
 
-struct Plane : public Object {
+struct Intersection {
+	const Primitive* object;
+	float t;
+	Intersection() : object(nullptr), t(std::numeric_limits<float>::infinity()) {}
+	Intersection(const Primitive* const o, float t) : object(o), t(t) {}
+	operator bool() { return object != nullptr; }
+};
+
+struct Object {
+	Primitive* object;
+	Vector colour;
+	Vector emission;
+	Material::Type type;
+};
+
+struct Scene {
+	Scene(std::array<Object, 11> o) : objects(o) {
+		for (auto& s : objects) {
+			s.object->setMaterial(s.colour, s.emission, s.type);
+		}
+	}
+	~Scene() {}
+	Scene(const Scene&) = delete;
+
+	std::array<Object, 11> objects;
+
+	Intersection intersect(const Ray& ray) const {
+		Intersection closestIntersection;
+    // Dumb linear search:
+		for (std::size_t i = 0; i < objects.max_size(); ++i) {
+			auto o = objects[i].object;
+			auto t = o->intersect(ray);
+			if (t > intersectionEpsilon && t < closestIntersection.t) {
+				closestIntersection = Intersection(o, t);
+			}
+		}
+		return closestIntersection;
+	}
+};
+
+struct Plane : public Primitive {
 	Vector n;
 	float d;
 	Plane(const Vector& normal, float offset) : n(normal.normalized()), d(offset) {}
@@ -80,7 +135,7 @@ struct Plane : public Object {
 	}
 };
 
-struct Disc : public Object {
+struct Disc : public Primitive {
 	Vector n;
 	Vector c;
 	float d;
@@ -108,7 +163,7 @@ struct Disc : public Object {
 	}
 };
 
-struct Sphere : public Object {
+struct Sphere : public Primitive {
 	const Vector centre;
 	const float radius;
 	const float radius2;
@@ -136,46 +191,6 @@ struct Sphere : public Object {
 
 	virtual Vector normal(const Vector& point) const override {
 		return (point - centre).normalized();
-	}
-};
-
-struct Intersection {
-	const Object* object;
-	float t;
-	Intersection() : object(nullptr), t(std::numeric_limits<float>::infinity()) {}
-	Intersection(const Object* const o, float t) : object(o), t(t) {}
-	operator bool() { return object != nullptr; }
-};
-
-struct ObjectSpec {
-	Object* object;
-	Vector colour;
-	Vector emission;
-	Material type;
-};
-
-struct Scene {
-	Scene(std::array<ObjectSpec, 11> o) : objects(o) {
-		for (auto& s : objects) {
-			s.object->setMaterial(s.colour, s.emission, s.type);
-		}
-	}
-	~Scene() {}
-	Scene(const Scene&) = delete;
-
-	std::array<ObjectSpec, 11> objects;
-
-	Intersection intersect(const Ray& ray) const {
-		Intersection closestIntersection;
-    // Dumb linear search:
-		for (std::size_t i = 0; i < objects.max_size(); ++i) {
-			auto o = objects[i].object;
-			auto t = o->intersect(ray);
-			if (t > intersectionEpsilon && t < closestIntersection.t) {
-				closestIntersection = Intersection(o, t);
-			}
-		}
-		return closestIntersection;
 	}
 };
 

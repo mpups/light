@@ -160,17 +160,17 @@ int main(int argc, char** argv) {
 	Vector light2(500, 600, 1000);
 
 	Scene scene({
-		ObjectSpec{new Sphere(Vector(-0.75,-1.45,-4.4), 1.05), Vector(4,8,4), zero, Material::specular},
-		ObjectSpec{new Sphere(Vector(2.0,-2.05,-3.7), 0.5), Vector(10,10,1), zero, Material::refractive}, // Glass sphere
-		ObjectSpec{new Sphere(Vector(-1.75,-1.95,-3.1), 0.6), Vector(4,4,12), zero, Material::diffuse}, // Diffuse sphere
-		ObjectSpec{new Plane(Y, 2.5), Vector(6,6,6), zero, Material::diffuse}, // Bottom plane
-		ObjectSpec{new Plane(Z, 5.5), Vector(6,6,6), zero, Material::diffuse}, // Back plane
-		ObjectSpec{new Plane(X, 2.75), Vector(10,2,2), zero, Material::diffuse}, // Left plane
-		ObjectSpec{new Plane(-X, 2.75), Vector(2,10,2), zero, Material::diffuse}, // Right plane
-		ObjectSpec{new Plane(-Y, 3.0), Vector(6,6,6), zero, Material::diffuse}, // Ceiling plane
-		ObjectSpec{new Plane(-Z, 0.5), Vector(6,6,6), zero, Material::diffuse}, // Front plane
-		ObjectSpec{new Disc(-Y, Vector(0, 2.9999, -4), 0.7), Vector(0,0,0), light1, Material::diffuse}, // Ceiling light
-		ObjectSpec{new Sphere(Vector(-1.12,-2.3,-3.5), 0.2f), Vector(100,200,100), light2, Material::specular} // Small ball light
+		Object{new Sphere(Vector(-0.75,-1.45,-4.4), 1.05), Vector(4,8,4), zero, Material::Type::specular},
+		Object{new Sphere(Vector(2.0,-2.05,-3.7), 0.5), Vector(10,10,1), zero, Material::Type::refractive}, // Glass sphere
+		Object{new Sphere(Vector(-1.75,-1.95,-3.1), 0.6), Vector(4,4,12), zero, Material::Type::diffuse}, // Diffuse sphere
+		Object{new Plane(Y, 2.5), Vector(6,6,6), zero, Material::Type::diffuse}, // Bottom plane
+		Object{new Plane(Z, 5.5), Vector(6,6,6), zero, Material::Type::diffuse}, // Back plane
+		Object{new Plane(X, 2.75), Vector(10,2,2), zero, Material::Type::diffuse}, // Left plane
+		Object{new Plane(-X, 2.75), Vector(2,10,2), zero, Material::Type::diffuse}, // Right plane
+		Object{new Plane(-Y, 3.0), Vector(6,6,6), zero, Material::Type::diffuse}, // Ceiling plane
+		Object{new Plane(-Z, 0.5), Vector(6,6,6), zero, Material::Type::diffuse}, // Front plane
+		Object{new Disc(-Y, Vector(0, 2.9999, -4), 0.7), Vector(0,0,0), light1, Material::Type::diffuse}, // Ceiling light
+		Object{new Sphere(Vector(-1.12,-2.3,-3.5), 0.2f), Vector(100,200,100), light2, Material::Type::specular} // Small ball light
 	});
 
 	RayTracerContext tracer(scene);
@@ -255,9 +255,11 @@ int main(int argc, char** argv) {
 
 	std::size_t totalRays = 0;
 	std::size_t maxPathLength = 0;
+	std::ofstream histFile(fileName + ".hist.txt");
 	for (auto& j : jobs) {
 		totalRays += j.totalRayCasts;
 		maxPathLength = std::max(maxPathLength, j.maxPathLength);
+		histFile << j.maxPathLength << "\n";
 	}
 
 	auto raysPerSec = totalRays/seconds.count();
