@@ -31,10 +31,7 @@ struct Ray {
 	Vector origin;
   Vector direction;
 	Ray() : origin(0.f, 0.f, 0.f), direction(0.f, 0.f, 0.f) {}
-
-	Ray(const Vector& o, const Vector& d) : origin(o), direction(d) {
-    direction = direction.normalized();
-  }
+	Ray(const Vector& o, const Vector& d) : origin(o), direction(d.normalized()) {}
 };
 
 struct Material {
