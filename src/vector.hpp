@@ -5,7 +5,9 @@
 #ifdef __POPC__
 #undef USE_EIGEN
 #else
+#ifdef USE_EIGEN
 #include <Eigen/Dense>
+#endif
 #include <iostream>
 #endif
 
