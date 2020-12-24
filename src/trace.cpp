@@ -94,6 +94,7 @@ void cvImageFromJobs(std::vector<TraceTileJob>& jobs, cv::Mat& image, float scal
 		});
 	}
 }
+
 struct RayDebug {
 	std::size_t row = 0;
 	std::size_t col = 0;
@@ -116,7 +117,7 @@ void onMouseClick(int event, int x, int y, int, void* data) {
 void drawDebugRays(const RayDebug& debug, const light::RayTracerContext& tracer,
 									 xoshiro::State rngState, cv::Mat& image) {
 	using namespace light;
-	TraceTileJob debugJob(debug.row, debug.col, debug.row, debug.col, 1);
+	TraceTileJob debugJob(debug.row, debug.col, debug.row, debug.col, 1, image.cols, image.rows);
 	debugJob.pathCapture = true;
 	debugJob.rngState = rngState;
 	Vector cam = pixelToRay(debug.col, debug.row, image.cols, image.rows);
