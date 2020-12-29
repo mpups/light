@@ -178,7 +178,7 @@ struct Object {
 
 struct Scene {
 	Scene(
-		std::array<Object<Sphere>, 4> sph,
+		std::array<Object<Sphere>, 6> sph,
 		std::array<Object<Plane>, 6> pln,
 		std::array<Object<Disc>, 1> dsc
 	) : spheres(sph), planes(pln), discs(dsc) {
@@ -195,7 +195,7 @@ struct Scene {
 	~Scene() {}
 	Scene(const Scene&) = delete;
 
-	std::array<Object<Sphere>, 4> spheres;
+	std::array<Object<Sphere>, 6> spheres;
 	std::array<Object<Plane>, 6> planes;
 	std::array<Object<Disc>, 1> discs;
 
