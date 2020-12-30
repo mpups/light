@@ -20,7 +20,7 @@ struct TraceTileJob {
 	std::size_t spp;
 	std::size_t imageWidth;
 	std::size_t imageHeight;
-	Image pixels;
+	std::vector<light::Vector> pixels;
 	xoshiro::State rngState;
 	std::size_t totalRayCasts;
 	std::size_t maxPathLength;
@@ -35,24 +35,21 @@ struct TraceTileJob {
 							    startCol(sc), endCol(ec),
                   spp(samples),
                   imageWidth(iw), imageHeight(ih),
-								  pixels(endRow - startRow),
+								  pixels((endRow - startRow) * (endCol - startCol), light::Vector(0, 0, 0)),
                   rngState({0, 0}),
 									totalRayCasts(0),
 									maxPathLength(0),
 									pathCapture(false),
-									nonZeroContribution(false)
-	{
-		for(auto &row: pixels) {
-			row.resize(endCol - startCol, light::Vector(0, 0, 0));
-		}
-	}
+									nonZeroContribution(false) {}
 
 	using Visitor = std::function<void(std::size_t r, std::size_t c, light::Vector& p)>;
 
 	void visitPixels(Visitor&& visit) {
+    std::size_t i = 0u;
 		for (std::size_t r = startRow; r < endRow; ++r) {
 			for (std::size_t c = startCol; c < endCol; ++c) {
-					visit(r, c, pixels[r - startRow][c - startCol]);
+					visit(r, c, pixels[i]);
+          i += 1;
 			}
 		}
 	}
