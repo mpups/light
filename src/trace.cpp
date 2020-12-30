@@ -114,7 +114,9 @@ void onMouseClick(int event, int x, int y, int, void* data) {
 	}
 }
 
-void drawDebugRays(const RayDebug& debug, const light::RayTracerContext& tracer,
+template <typename SceneType>
+void drawDebugRays(const RayDebug& debug,
+                   const light::RayTracerContext<SceneType>& tracer,
 									 xoshiro::State rngState, cv::Mat& image) {
 	using namespace light;
 	TraceTileJob debugJob(debug.row, debug.col, debug.row, debug.col, 1, image.cols, image.rows);
@@ -160,7 +162,7 @@ int main(int argc, char** argv) {
 	Vector light1(10000, 5950, 4370);
 	Vector light2(500, 600, 1000);
 
-	Scene scene(
+	Scene<4, 6, 1> scene(
 		{
 			Object<Sphere>{new Sphere(Vector(-0.75,-1.45,-4.4), 1.05), Vector(4,8,4), zero, Material::Type::specular},
 			Object<Sphere>{new Sphere(Vector(2.0,-2.05,-3.7), 0.5), Vector(10,10,1), zero, Material::Type::refractive}, // Glass sphere
@@ -180,7 +182,7 @@ int main(int argc, char** argv) {
 		}
 	);
 
-	RayTracerContext tracer(scene);
+	RayTracerContext<decltype(scene)> tracer(scene);
 
   tracer.refractiveIndex = args.at("refractive-index").as<float>();
 	tracer.rouletteDepth = args.at("roulette-depth").as<float>();

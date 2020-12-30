@@ -5,7 +5,10 @@
 #include "xoshiro.hpp"
 #include "sdf.hpp"
 
-light::Vector trace(const light::Ray& cameraRay, const light::RayTracerContext& tracer, TraceTileJob& job) {
+template <typename SceneType>
+light::Vector trace(const light::Ray& cameraRay,
+                    const light::RayTracerContext<SceneType>& tracer,
+                    TraceTileJob& job) {
 	using namespace light;
 	static const Vector zero(0, 0, 0);
 	static const Vector one(1, 1, 1);

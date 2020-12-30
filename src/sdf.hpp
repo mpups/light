@@ -39,8 +39,9 @@ void reflect(light::Ray& ray, light::Vector normal) {
 
 // Glass/refractive BRDF - we use the vector version of Snell's law and Fresnel's law
 // to compute the outgoing reflection and refraction directions and probability weights.
+template <typename SceneType>
 void refract(light::Ray& ray, light::Vector normal,
-						 const light::RayTracerContext& tracer, float rnd1) {
+						 const light::RayTracerContext<SceneType>& tracer, float rnd1) {
 	auto n = tracer.refractiveIndex;
 	auto R0 = (1.0-n)/(1.0+n);
 	R0 = R0*R0;

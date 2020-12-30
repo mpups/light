@@ -176,11 +176,12 @@ struct Object {
 	Material::Type type;
 };
 
+template <std::size_t NumSpheres, std::size_t NumPlanes, std::size_t NumDiscs>
 struct Scene {
 	Scene(
-		std::array<Object<Sphere>, 6> sph,
-		std::array<Object<Plane>, 6> pln,
-		std::array<Object<Disc>, 1> dsc
+		std::array<Object<Sphere>, NumSpheres> sph,
+		std::array<Object<Plane>, NumPlanes> pln,
+		std::array<Object<Disc>, NumDiscs> dsc
 	) : spheres(sph), planes(pln), discs(dsc) {
 		for (auto& s : spheres) {
 			s.object->setMaterial(s.colour, s.emission, s.type);
@@ -195,9 +196,9 @@ struct Scene {
 	~Scene() {}
 	Scene(const Scene&) = delete;
 
-	std::array<Object<Sphere>, 6> spheres;
-	std::array<Object<Plane>, 6> planes;
-	std::array<Object<Disc>, 1> discs;
+	std::array<Object<Sphere>, NumSpheres> spheres;
+	std::array<Object<Plane>, NumPlanes> planes;
+	std::array<Object<Disc>, NumDiscs> discs;
 
 	Intersection intersect(Ray& ray) const {
 		Intersection closestIntersection;
@@ -305,14 +306,15 @@ orthonormalSystem(const Vector& v1) {
 		return std::make_tuple(v2, v1.cross(v2), v1);
 }
 
+template <typename SceneType>
 struct RayTracerContext {
-	const Scene& scene;
+	const SceneType& scene;
 	int depth;
 	float refractiveIndex;
 	float rouletteDepth;
 	float stopProb;
 
-	RayTracerContext(const Scene& s) : scene(s), depth(0) {}
+	RayTracerContext(const SceneType& s) : scene(s), depth(0) {}
 };
 
 struct Contribution {
