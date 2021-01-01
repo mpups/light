@@ -58,7 +58,7 @@ light::Vector trace(const light::Ray& cameraRay,
 			contributions.push_back({zero, rrFactor, Contribution::Type::SPECULAR});
 		} else if (intersection.material->type == Material::Type::refractive) {
 			const auto rnd1 = xoshiro::uniform_0_1(gen.rng);
-			refract(ray, intersection.normal, tracer, rnd1);
+			refract(ray, intersection.normal, tracer.refractiveIndex, rnd1);
 			contributions.push_back({zero, 1.15f * rrFactor, Contribution::Type::REFLECT});
 		}
 
