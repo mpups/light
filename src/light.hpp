@@ -311,7 +311,7 @@ struct RayTracerContext {
 	const SceneType& scene;
 	int depth;
 	float refractiveIndex;
-	float rouletteDepth;
+	std::size_t rouletteDepth;
 	float stopProb;
 
 	RayTracerContext(const SceneType& s) : scene(s), depth(0) {}
