@@ -7,6 +7,7 @@
 namespace exr {
 
 struct Image {
+  Image() : width(0), height(0) {}
   Image(std::size_t w, std::size_t h) : width(w), height(h) {}
   std::size_t width;
   std::size_t height;
