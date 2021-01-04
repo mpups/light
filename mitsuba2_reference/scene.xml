@@ -1,0 +1,185 @@
+<scene version="2.1.0">
+
+<!-- Defaults, these can be set via the command line: -Darg=value -->
+
+	<default name="spp" value="128"/>
+	<default name="resx" value="800"/>
+	<default name="resy" value="800"/>
+
+<!-- Camera and Rendering Parameters -->
+
+	<integrator type="path">
+		<integer name="max_depth" value="20"/>
+    <integer name="rr_depth" value="5"/>
+	</integrator>
+	<sensor type="perspective">
+		<string name="fov_axis" value="x"/>
+		<float name="fov" value="90"/>
+		<float name="near_clip" value="0.100000"/>
+		<float name="far_clip" value="100.000000"/>
+		<transform name="to_world">
+			<rotate x="1" angle="-90"/>
+			<rotate y="1" angle="0"/>
+			<rotate z="1" angle="-180"/>
+		</transform>
+		<sampler type="independent">
+			<integer name="sample_count" value="$spp"/>
+		</sampler>
+		<film type="hdrfilm">
+			<integer name="width" value="$resx"/>
+			<integer name="height" value="$resy"/>
+		</film>
+	</sensor>
+
+<!-- Materials -->
+
+	<bsdf type="twosided" id="mat-yellow">
+		<bsdf type="diffuse">
+			<rgb value="1.000000 0.890000 0.550000" name="reflectance"/>
+		</bsdf>
+	</bsdf>
+	<bsdf type="twosided" id="mat-grey">
+		<bsdf type="diffuse">
+			<rgb value="0.980000 0.760000 0.660000" name="reflectance"/>
+		</bsdf>
+	</bsdf>
+	<bsdf type="twosided" id="mat-blue">
+		<bsdf type="diffuse">
+			<rgb value="0.270000 0.310000 0.380000" name="reflectance"/>
+		</bsdf>
+	</bsdf>
+	<bsdf type="twosided" id="mat-pink">
+		<bsdf type="diffuse">
+			<rgb value="0.930000 0.430000 0.480000" name="reflectance"/>
+		</bsdf>
+	</bsdf>
+	<bsdf type="twosided" id="mat-reflect">
+		<bsdf type="conductor">
+			<rgb value="0.800000 0.800000 0.800000" name="specular_reflectance"/>
+		</bsdf>
+	</bsdf>
+	<bsdf type="dielectric" id="mat-refract">
+		<float name="int_ior" value="2.200000"/>
+		<rgb value="0.800000 0.800000 0.800000" name="specular_transmittance"/>
+	</bsdf>
+	<bsdf type="diffuse" id="emitter-bsdf">
+		<rgb value="0.000000" name="reflectance"/>
+	</bsdf>
+
+<!-- Emitters -->
+  <shape type="sphere">
+      <point name="center" x="-1.12" y="-3.5" z="2.3"/>
+      <float name="radius" value="0.2"/>
+      <ref id="emitter-bsdf" name="bsdf"/>
+      <emitter type="area">
+        <rgb value="1.000000 1.200000 2.000000" name="radiance"/>
+      </emitter>
+  </shape>
+
+  <shape type="sphere">
+      <point name="center" x="-0.28" y="-3" z="2.34"/>
+      <float name="radius" value="0.2"/>
+      <ref id="emitter-bsdf" name="bsdf"/>
+      <emitter type="area">
+      <rgb value="0.934394 2.000000 0.867408" name="radiance"/>
+      </emitter>
+  </shape>
+
+  <shape type="sphere">
+      <point name="center" x="0.58" y="-2.6" z="2.39"/>
+      <float name="radius" value="0.2"/>
+      <ref id="emitter-bsdf" name="bsdf"/>
+      <emitter type="area">
+      <rgb value="2.000000 0.734493 0.734493" name="radiance"/>
+      </emitter>
+  </shape>
+
+  <shape type="disk">
+    <transform name="to_world">
+        <scale value="0.7"/>
+        <translate x="0" y="-4" z="-2.99"/>
+    </transform>
+    <emitter type="area">
+      <rgb value="15.000000 15.000000 15.000000" name="radiance"/>
+    </emitter>
+  </shape>
+
+<!-- Shapes -->
+
+  <shape type="sphere">
+      <point name="center" x="-1.75" y="-3.1" z="1.95"/>
+      <float name="radius" value="0.6"/>
+      <ref id="mat-yellow" name="bsdf"/>
+  </shape>
+
+  <shape type="sphere">
+      <point name="center" x="2" y="-3.7" z="2.05"/>
+      <float name="radius" value="0.5"/>
+      <ref id="mat-refract" name="bsdf"/>
+  </shape>
+
+  <shape type="sphere">
+      <point name="center" x="-0.75" y="-4.4" z="1.45"/>
+      <float name="radius" value="1.05"/>
+      <ref id="mat-reflect" name="bsdf"/>
+  </shape>
+
+  <!-- Floor -->
+  <shape type="rectangle">
+    <transform name="to_world">
+        <scale value="3"/>
+        <translate x="0" y="-2.6" z="2.55"/>
+    </transform>
+    <ref id="mat-grey" name="bsdf"/>
+  </shape>
+
+  <!-- Back wall -->
+  <shape type="rectangle">
+    <transform name="to_world">
+        <scale value="3"/>
+        <rotate x="1" angle="90"/>
+        <translate x="0" y="-5.5" z="0"/>
+    </transform>
+    <ref id="mat-grey" name="bsdf"/>
+  </shape>
+
+  <!-- Right wall -->
+  <shape type="rectangle">
+    <transform name="to_world">
+        <scale value="3"/>
+        <rotate y="1" angle="90"/>
+        <translate x="2.75" y="-2.6" z="-0.45"/>
+    </transform>
+    <ref id="mat-blue" name="bsdf"/>
+  </shape>
+
+  <!-- Left wall -->
+  <shape type="rectangle">
+    <transform name="to_world">
+        <scale value="3"/>
+        <rotate y="1" angle="-90"/>
+        <translate x="-2.75" y="-2.6" z="-0.45"/>
+    </transform>
+    <ref id="mat-pink" name="bsdf"/>
+  </shape>
+
+  <!-- Ceiling -->
+  <shape type="rectangle">
+    <transform name="to_world">
+        <scale value="3"/>
+        <translate x="0" y="-2.6" z="-3"/>
+    </transform>
+    <ref id="mat-grey" name="bsdf"/>
+  </shape>
+
+  <!-- Front wall -->
+  <shape type="rectangle">
+    <transform name="to_world">
+        <scale value="3"/>
+        <rotate x="1" angle="90"/>
+        <translate x="0" y="0.4" z="-0.45"/>
+    </transform>
+    <ref id="mat-grey" name="bsdf"/>
+  </shape>
+
+</scene>
