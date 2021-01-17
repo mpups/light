@@ -187,7 +187,7 @@ template <std::size_t NumSpheres, std::size_t NumPlanes,
         emitters.push_back(std::make_pair(ObjectType::SPHERE, i));
       }
     }
-    for (auto i = 0u; i < spheres.size(); ++i) {
+    for (auto i = 0u; i < planes.size(); ++i) {
       auto& p = planes[i];
       p.object->setMaterial(p.colour, p.emission, p.type);
       if (p.object->material.emissive) {
@@ -253,11 +253,11 @@ template <std::size_t NumSpheres, std::size_t NumPlanes,
       ray.origin += ray.direction * closestIntersection.t;
       const std::size_t objType = closestIntersection.objectId.first;
       const std::size_t objIndex = closestIntersection.objectId.second;
-      if (objType == 0) {
+      if (objType == ObjectType::SPHERE) {
         closestIntersection.normal = spheres[objIndex].object->normal(ray.origin);
-      } else if (objType == 1) {
+      } else if (objType == ObjectType::PLANE) {
         closestIntersection.normal = planes[objIndex].object->normal(ray.origin);
-      } else if (objType == 2) {
+      } else if (objType == ObjectType::DISC) {
         closestIntersection.normal = discs[objIndex].object->normal(ray.origin);
       }
     }
