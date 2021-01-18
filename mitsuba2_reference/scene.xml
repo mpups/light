@@ -97,7 +97,7 @@
   <shape type="disk">
     <transform name="to_world">
         <scale value="0.7"/>
-        <translate x="0" y="-4" z="-2.99"/>
+        <translate x="0" y="-4" z="-2.999"/>
     </transform>
     <emitter type="area">
       <rgb value="15.000000 15.000000 15.000000" name="radiance"/>
@@ -128,7 +128,7 @@
   <shape type="rectangle">
     <transform name="to_world">
         <scale value="3"/>
-        <translate x="0" y="-2.6" z="2.55"/>
+        <translate x="0" y="-2.6" z="2.5"/>
     </transform>
     <ref id="mat-grey" name="bsdf"/>
   </shape>
