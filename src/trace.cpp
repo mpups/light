@@ -160,57 +160,51 @@ int main(int argc, char** argv) {
   const auto X = Vec(1.f, 0.f, 0.f);
   const auto Y = Vec(0.f, 1.f, 0.f);
   const auto Z = Vec(0.f, 0.f, 1.f);
+  const auto groundDir = Vec(0.f, 1.4f, 1.f);
+  const auto skyColour = Vec(10, 20, 23);
 
   // For now we will hard code the scene in the codelet.
   // Eventually the scene will be stored in input tensors:
-  light::Sphere spheres[6] = {
-    light::Sphere(Vec(-0.75f, -1.45f, -4.4f), 1.05f),
-    light::Sphere(Vec(2.0f, -2.05f, -3.7f), 0.5f),
-    light::Sphere(Vec(-1.75f, -1.95f, -3.1f), 0.6f),
-    light::Sphere(Vec(-1.12f, -2.3f, -3.5f), 0.2f),
-    light::Sphere(Vec(-0.28f, -2.34f, -3.f), 0.2f),
-    light::Sphere(Vec(.58f, -2.39f, -2.6f), 0.2f)
+  light::Sphere spheres[] = {
+    light::Sphere(Vec(-3.f, -0.7f, -5.f), 1.1f),
+    light::Sphere(Vec(1.f, -1.2f, -4.4f), 1.3f),
+    light::Sphere(Vec(1.f, -1.2f, -4.4f), 0.25f),
+    light::Sphere(Vec(-1.f, 1.6f, -8.f), 1.4999f),
+    light::Sphere(Vec(-1.f, 1.6f, -8.f), 1.5f),
   };
-  light::Plane planes[6] = {
-    light::Plane(Y, 2.5f),
-    light::Plane(Z, 5.5f),
-    light::Plane(X, 2.75f),
-    light::Plane(-X, 2.75f),
-    light::Plane(-Y, 3.f),
-    light::Plane(-Z, .5f)
-  };
-  light::Disc discs[1] = {
-    light::Disc(-Y, Vec(0.f, 2.9999f, -4.f), .7f)
+  light::Plane planes[1] = {
+    light::Plane(groundDir, 4.5f),
   };
 
-  const Vec lightW(8000, 8000, 8000);
+  const auto lightPos = Vec(10.f, .4f, -1.f);
+  const auto lightDir = spheres[2].centre - lightPos;
+
+  light::Disc discs[1] = {
+    light::Disc(lightDir, lightPos, 1.5f)
+  };
+
+  const Vec lightW(10000, 12000, 15000);
   const Vec lightR(1000, 367, 367);
   const Vec lightG(467, 1000, 434);
   const Vec lightB(500, 600, 1000);
-  const float colourGain = 15.f;
-  const auto sphereColour = Vec(1.f, .89f, .55f) * colourGain;
-  const auto wallColour1 = Vec(.98f, .76f, .66f) * colourGain;
+  const float colourGain = 20.f;
+  const auto sphereColour = Vec(1.f, .3f, .4f) * colourGain;
+  const auto wallColour1 = Vec(.5f, .5f, .5f) * colourGain;
   const auto wallColour2 = Vec(.93f, .43f, .48f) * colourGain;
-  const auto wallColour3 = Vec(.27f, .31f, .38f) * colourGain;
+  const auto sphereColour2 = Vec(0.1, 1, 0.5) * colourGain;
   constexpr auto specular = light::Material::Type::specular;
   constexpr auto refractive = light::Material::Type::refractive;
   constexpr auto diffuse = light::Material::Type::diffuse;
-  light::Scene<6, 6, 1> scene(
+  light::Scene<5, 1, 1> scene(
     {
       light::Object<light::Sphere>{&spheres[0], Vec(4.f, 8.f, 4.f), zero, specular},
       light::Object<light::Sphere>{&spheres[1], Vec(10.f, 10.f, 1.f), zero, refractive}, // Glass sphere
       light::Object<light::Sphere>{&spheres[2], sphereColour, zero, diffuse}, // Diffuse sphere
-      light::Object<light::Sphere>{&spheres[3], zero, lightB, specular}, // Small light red
-      light::Object<light::Sphere>{&spheres[4], zero, lightG, specular}, // Small light green
-      light::Object<light::Sphere>{&spheres[5], zero, lightR, specular}  // Small light blue
+      light::Object<light::Sphere>{&spheres[3], sphereColour2, zero, diffuse}, // Green diffuse sphere
+      light::Object<light::Sphere>{&spheres[4], sphereColour2, zero, refractive}, // clear coat
     },
     {
       light::Object<light::Plane>{&planes[0], wallColour1, zero, diffuse}, // Bottom plane
-      light::Object<light::Plane>{&planes[1], wallColour1, zero, diffuse}, // Back plane
-      light::Object<light::Plane>{&planes[2], wallColour2, zero, diffuse}, // Left plane
-      light::Object<light::Plane>{&planes[3], wallColour3, zero, diffuse}, // Right plane
-      light::Object<light::Plane>{&planes[4], wallColour1, zero, diffuse}, // Ceiling plane
-      light::Object<light::Plane>{&planes[5], wallColour1, zero, diffuse}, // Front plane
     },
     {
       light::Object<light::Disc>{&discs[0], Vec(0,0,0), lightW, diffuse}, // Ceiling light
