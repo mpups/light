@@ -119,7 +119,8 @@ void drawDebugRays(const RayDebug& debug,
                    const light::RayTracerContext<SceneType>& tracer,
 									 xoshiro::State rngState, cv::Mat& image) {
 	using namespace light;
-	TraceTileJob debugJob(debug.row, debug.col, debug.row, debug.col, 1, image.cols, image.rows);
+	TraceTileJob debugJob(debug.row, debug.col, debug.row, debug.col, 1,
+                        image.cols, image.rows);
 	debugJob.pathCapture = true;
 	debugJob.rngState = rngState;
 	Vector cam = pixelToRay(debug.col, debug.row, image.cols, image.rows);

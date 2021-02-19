@@ -66,10 +66,10 @@ using Vector = Eigen::Vector3f;
 
 #ifndef __POPC__
 #ifndef USE_EIGEN
-inline        
+inline
 std::ostream& operator << (std::ostream &os, const light::Vector &v) {
   os << v.x << " " << v.y << " " << v.z;
   return os;
-}       
+}
 #endif
 #endif
