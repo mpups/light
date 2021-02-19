@@ -67,8 +67,8 @@ light::Vector trace(const light::Ray& cameraRay,
     depth += 1;
   }
 
-	job.totalRayCasts += contributions.size();
-	job.maxPathLength = std::max(job.maxPathLength, contributions.size());
+	job.totalRayCasts += depth;
+	job.maxPathLength = std::max(job.maxPathLength, depth);
 	job.nonZeroContribution = hitEmitter;
 
 	// Combine all the material contributions along the ray path:
