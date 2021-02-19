@@ -21,8 +21,8 @@ light::Vector trace(const light::Ray& cameraRay,
   bool hitEmitter = false;
   auto gen = job.getGenerators();
 
-  std::uint32_t depth = 0;
-  const std::uint32_t maxDepth = 20;
+  std::size_t depth = 0;
+  const std::size_t maxDepth = 20;
 
   // Loop to trace the ray through the scence and produce the ray path:
   auto ray = cameraRay;
@@ -67,35 +67,35 @@ light::Vector trace(const light::Ray& cameraRay,
     depth += 1;
   }
 
-	job.totalRayCasts += depth;
-	job.maxPathLength = std::max(job.maxPathLength, depth);
-	job.nonZeroContribution = hitEmitter;
+  job.totalRayCasts += depth;
+  job.maxPathLength = std::max(job.maxPathLength, depth);
+  job.nonZeroContribution = hitEmitter;
 
-	// Combine all the material contributions along the ray path:
-	Vector total = zero;
-	if (hitEmitter) {
-		while (!contributions.empty()) {
-			auto c = contributions.back();
-			contributions.pop_back();
+  // Combine all the material contributions along the ray path:
+  Vector total = zero;
+  if (hitEmitter) {
+    while (!contributions.empty()) {
+      auto c = contributions.back();
+      contributions.pop_back();
 
-			switch (c.type) {
-			case Contribution::Type::DIFFUSE:
-				total = total.cwiseProduct(c.clr) * c.weight;
-				break;
-			case Contribution::Type::EMIT:
-				total += c.clr * c.weight;
-				break;
-			case Contribution::Type::SPECULAR:
-				total *= c.weight;
-				break;
-			case Contribution::Type::REFLECT:
-				total *= c.weight;
-				break;
-			case Contribution::Type::SKIP:
-			default:
-				break;
-			}
-		}
-	}
-	return total;
+      switch (c.type) {
+      case Contribution::Type::DIFFUSE:
+        total = total.cwiseProduct(c.clr) * c.weight;
+        break;
+      case Contribution::Type::EMIT:
+        total += c.clr * c.weight;
+        break;
+      case Contribution::Type::SPECULAR:
+        total *= c.weight;
+        break;
+      case Contribution::Type::REFLECT:
+        total *= c.weight;
+        break;
+      case Contribution::Type::SKIP:
+      default:
+        break;
+      }
+    }
+  }
+  return total;
 }

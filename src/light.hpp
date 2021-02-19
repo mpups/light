@@ -67,7 +67,7 @@ struct Plane {
 
   Vector normal(const Vector&) const { return n; }
 
-	float intersect(const Ray& ray) const {
+  float intersect(const Ray& ray) const {
     auto angle = n.dot(ray.direction);
     if (angle != 0.f) {
       auto t = -((n.dot(ray.origin)) + d) / angle;
@@ -94,25 +94,25 @@ struct Disc {
 
   Vector normal(const Vector&) const { return n; }
 
-	float intersect(const Ray& ray) const {
-		auto angle = n.dot(ray.direction);
-		if (angle != 0.f) {
-			auto t = -((n.dot(ray.origin)) + d) / angle;
-			if (t > epsilon) {
-				const auto hitPoint = ray.origin + ray.direction*t;
-				auto d2 = (hitPoint - c).squaredNorm();
-				if (d2 < r2) {
-					return t;
-				}
-			}
-		}
+  float intersect(const Ray& ray) const {
+    auto angle = n.dot(ray.direction);
+    if (angle != 0.f) {
+      auto t = -((n.dot(ray.origin)) + d) / angle;
+      if (t > epsilon) {
+        const auto hitPoint = ray.origin + ray.direction*t;
+        auto d2 = (hitPoint - c).squaredNorm();
+        if (d2 < r2) {
+          return t;
+        }
+      }
+    }
 
-		return 0.f;
-	}
+    return 0.f;
+  }
 
-	Material material;
-	void setMaterial(Vector c, Vector e, Material::Type m) {
-		material = Material(c, e, m);
+  Material material;
+  void setMaterial(Vector c, Vector e, Material::Type m) {
+    material = Material(c, e, m);
   }
 };
 
@@ -155,21 +155,21 @@ struct Disc {
 struct Intersection {
   using ObjectId = std::pair<std::size_t, std::size_t>;
   ObjectId objectId;
-	Material* material;
-	Vector normal;
-	float t;
-	bool valid;
-	Intersection() : t(std::numeric_limits<float>::infinity()), valid(false) {}
-	Intersection(ObjectId id, Material* m, float t) : objectId(id), material(m), t(t), valid(true) {}
-	operator bool() { return valid; }
+  Material* material;
+  Vector normal;
+  float t;
+  bool valid;
+  Intersection() : t(std::numeric_limits<float>::infinity()), valid(false) {}
+  Intersection(ObjectId id, Material* m, float t) : objectId(id), material(m), t(t), valid(true) {}
+  operator bool() { return valid; }
 };
 
 template <class T>
 struct Object {
-	T* object;
-	Vector colour;
-	Vector emission;
-	Material::Type type;
+  T* object;
+  Vector colour;
+  Vector emission;
+  Material::Type type;
 };
 
 template <std::size_t NumSpheres, std::size_t NumPlanes,
@@ -262,89 +262,89 @@ template <std::size_t NumSpheres, std::size_t NumPlanes,
       }
     }
 
-		return closestIntersection;
+    return closestIntersection;
   }
 };
 
 inline
 Vector pixelToRay(float x, float y, std::uint32_t width, std::uint32_t height) {
-	float w = width;
-	float h = height;
-	float fovx = Pi/4;
-	float fovy = (h/w) * fovx;
-	auto tanfovx = tan(fovx);
-	auto tanfovy = tan(fovy);
-	return Vector(((2*x-w)/w) * tanfovx,
-				-((2*y-h)/h) * tanfovy,
-				-1.0);
+  float w = width;
+  float h = height;
+  float fovx = Pi/4;
+  float fovy = (h/w) * fovx;
+  auto tanfovx = tan(fovx);
+  auto tanfovy = tan(fovy);
+  return Vector(((2*x-w)/w) * tanfovx,
+        -((2*y-h)/h) * tanfovy,
+        -1.0);
 }
 
 inline
 Vector vertexToPixel(Vector v, std::uint32_t width, std::uint32_t height) {
-	float w = width;
-	float h = height;
-	float fovx = Pi/4;
-	float fovy = (h/w) * fovx;
-	auto tanfovx = tan(fovx);
-	auto tanfovy = tan(fovy);
-	auto x = -v.x / v.z;
-	auto y = v.y / v.z;
-	auto px = (w/2) * ((x/tanfovx) + 1.f);
-	auto py = (h/2) * ((y/tanfovy) + 1.f);
-	return Vector(px, py, v.z);
+  float w = width;
+  float h = height;
+  float fovx = Pi/4;
+  float fovy = (h/w) * fovx;
+  auto tanfovx = tan(fovx);
+  auto tanfovy = tan(fovy);
+  auto x = -v.x / v.z;
+  auto y = v.y / v.z;
+  auto px = (w/2) * ((x/tanfovx) + 1.f);
+  auto py = (h/2) * ((y/tanfovy) + 1.f);
+  return Vector(px, py, v.z);
 }
 
 inline
 Vector hemisphere(float u1, float u2) {
-	const float r = sqrtf(1.f - u1*u1);
-	const float phi = 2 * Pi * u2;
-	return Vector(cos(phi)*r, sin(phi)*r, u1);
+  const float r = sqrtf(1.f - u1*u1);
+  const float phi = 2 * Pi * u2;
+  return Vector(cos(phi)*r, sin(phi)*r, u1);
 }
 
 inline
 std::tuple<Vector, Vector, Vector>
 orthonormalSystem(const Vector& v1) {
     Vector v2(0, 0, 0);
-		Vector v1abs = v1.array().abs();
-		Vector v1sq = v1.cwiseProduct(v1);
-		const auto v1x = v1(0);
-		const auto v1y = v1(1);
-		const auto v1z = v1(2);
-		const auto v1x2 = v1sq(0);
-		const auto v1y2 = v1sq(1);
-		const auto v1z2 = v1sq(2);
+    Vector v1abs = v1.array().abs();
+    Vector v1sq = v1.cwiseProduct(v1);
+    const auto v1x = v1(0);
+    const auto v1y = v1(1);
+    const auto v1z = v1(2);
+    const auto v1x2 = v1sq(0);
+    const auto v1y2 = v1sq(1);
+    const auto v1z2 = v1sq(2);
     if (v1abs(0) > v1abs(1)) {
-		  float invLen = 1.f / std::sqrt(v1x2 + v1z2);
-		  v2 = Vector(-v1z * invLen, 0.f, v1x * invLen);
+      float invLen = 1.f / std::sqrt(v1x2 + v1z2);
+      v2 = Vector(-v1z * invLen, 0.f, v1x * invLen);
     } else {
-		  float invLen = 1.0f / std::sqrt(v1y2 + v1z2);
-		  v2 = Vector(0.f, v1z * invLen, -v1y * invLen);
+      float invLen = 1.0f / std::sqrt(v1y2 + v1z2);
+      v2 = Vector(0.f, v1z * invLen, -v1y * invLen);
     }
-		return std::make_tuple(v2, v1.cross(v2), v1);
+    return std::make_tuple(v2, v1.cross(v2), v1);
 }
 
 template <typename SceneType>
 struct RayTracerContext {
-	const SceneType& scene;
-	int depth;
-	float refractiveIndex;
-	std::size_t rouletteDepth;
-	float stopProb;
+  const SceneType& scene;
+  int depth;
+  float refractiveIndex;
+  std::size_t rouletteDepth;
+  float stopProb;
 
-	RayTracerContext(const SceneType& s) : scene(s), depth(0) {}
+  RayTracerContext(const SceneType& s) : scene(s), depth(0) {}
 };
 
 struct Contribution {
-	enum class Type {
-		DIFFUSE,
-		EMIT,
-		SPECULAR,
-		REFLECT,
-		SKIP
-	};
-	Vector clr;
-	float weight;
-	Type type;
+  enum class Type {
+    DIFFUSE,
+    EMIT,
+    SPECULAR,
+    REFLECT,
+    SKIP
+  };
+  Vector clr;
+  float weight;
+  Type type;
 };
 
 } // end namespace light
