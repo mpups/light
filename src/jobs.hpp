@@ -18,7 +18,9 @@ struct TraceTileJob {
 	std::size_t startCol;
 	std::size_t endCol;
 	std::size_t spp;
-	Image pixels;
+	std::size_t imageWidth;
+	std::size_t imageHeight;
+	std::vector<light::Vector> pixels;
 	xoshiro::State rngState;
 	std::size_t totalRayCasts;
 	std::size_t maxPathLength;
@@ -27,28 +29,27 @@ struct TraceTileJob {
 	std::vector<light::Vector> vertices;
 
 	TraceTileJob(std::size_t sr, std::size_t sc,
-							 std::size_t er, std::size_t ec,
-               std::size_t samples)
+				 std::size_t er, std::size_t ec,
+				 std::size_t samples, std::size_t iw, std::size_t ih)
 							 : 	startRow(sr), endRow(er),
-							 	  startCol(sc), endCol(ec), spp(samples),
-									pixels(endRow - startRow),
+							    startCol(sc), endCol(ec),
+                  spp(samples),
+                  imageWidth(iw), imageHeight(ih),
+								  pixels((endRow - startRow) * (endCol - startCol), light::Vector(0, 0, 0)),
                   rngState({0, 0}),
 									totalRayCasts(0),
 									maxPathLength(0),
 									pathCapture(false),
-									nonZeroContribution(false)
-	{
-		for(auto &row: pixels) {
-			row.resize(endCol - startCol, light::Vector(0, 0, 0));
-		}
-	}
+									nonZeroContribution(false) {}
 
 	using Visitor = std::function<void(std::size_t r, std::size_t c, light::Vector& p)>;
 
 	void visitPixels(Visitor&& visit) {
+    std::size_t i = 0u;
 		for (std::size_t r = startRow; r < endRow; ++r) {
 			for (std::size_t c = startCol; c < endCol; ++c) {
-					visit(r, c, pixels[r - startRow][c - startCol]);
+					visit(r, c, pixels[i]);
+          i += 1;
 			}
 		}
 	}
@@ -59,6 +60,7 @@ struct TraceTileJob {
 	std::size_t cols() const { return endCol - startCol; }
 };
 
+inline
 std::vector<TraceTileJob> createTracingJobs(std::size_t imageWidth, std::size_t imageHeight,
 																						std::size_t tileWidth, std::size_t tileHeight,
 																						std::size_t samples, std::uint64_t seed) {
@@ -78,7 +80,7 @@ std::vector<TraceTileJob> createTracingJobs(std::size_t imageWidth, std::size_t 
 			if (endCol > imageWidth) {
 				endCol = imageWidth;
 			}
-			jobs.emplace_back(r, c, endRow, endCol, samples);
+			jobs.emplace_back(r, c, endRow, endCol, samples, imageWidth, imageHeight);
 			jobs.back().rngState = state;
 			xoshiro::jump(state);
 		}
@@ -86,6 +88,7 @@ std::vector<TraceTileJob> createTracingJobs(std::size_t imageWidth, std::size_t 
 	return jobs;
 }
 
+inline
 void accumulateTraceJobResults(std::vector<TraceTileJob>& jobs, Image& image) {
 	for (auto& j : jobs) {
 		j.visitPixels([&] (std::size_t r, std::size_t c, light::Vector& p) {
@@ -94,6 +97,7 @@ void accumulateTraceJobResults(std::vector<TraceTileJob>& jobs, Image& image) {
 	}
 }
 
+inline
 std::ostream& operator << (std::ostream &os, const TraceTileJob &j) {
     os << "[" << j.startRow << "," << j.endRow << "), [" << j.startCol << "," << j.endCol << ")";
     return os;

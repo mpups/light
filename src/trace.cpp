@@ -116,7 +116,8 @@ void onMouseClick(int event, int x, int y, int, void* data) {
 void drawDebugRays(const RayDebug& debug, const light::RayTracerContext& tracer,
 									 xoshiro::State rngState, cv::Mat& image) {
 	using namespace light;
-	TraceTileJob debugJob(debug.row, debug.col, debug.row, debug.col, 1);
+	TraceTileJob debugJob(debug.row, debug.col, debug.row, debug.col, 1,
+                        image.cols, image.rows);
 	debugJob.pathCapture = true;
 	debugJob.rngState = rngState;
 	Vector cam = pixelToRay(debug.col, debug.row, image.cols, image.rows);
@@ -239,7 +240,7 @@ int main(int argc, char** argv) {
 		// Save/display image at regular intervals and when done:
 		if (s == spp - 1 || s == 1 || s % 64 == 0) {
 			cvImageFromJobs(jobs, image, (spp-1)/(float)s);
-			writeTiledExr(fileName + ".exr", width, height, tileWidth, tileHeight, pixelsFromJobs(jobs));
+			exr::writeTiled(fileName + ".exr", width, height, tileWidth, tileHeight, pixelsFromJobs(jobs));
 			cv::imwrite(fileName, image);
 			if (gui) {
 				if (debug.enabled) {

@@ -2,7 +2,10 @@
 
 #include "light.hpp"
 
+namespace light {
+
 // Diffuse BRDF - choose an outgoing direction with hemisphere sampling.
+inline
 light::Contribution diffuse(light::Ray& ray, light::Vector normal,
 										 const light::Intersection& intersection, float rrFactor,
 										 float rnd1, float rnd2) {
@@ -24,12 +27,13 @@ light::Contribution diffuse(light::Ray& ray, light::Vector normal,
 #endif
 
 	float weight = ray.direction.dot(normal) * .1f * rrFactor;
-	return Contribution{intersection.object->material.colour, weight, Contribution::Type::DIFFUSE};
+	return Contribution{intersection.material->colour, weight, Contribution::Type::DIFFUSE};
 }
 
 // Specular BRDF - this is a singularity in the rendering equation that follows
 // delta distribution, therefore we handle this case explicitly - one incoming
 // direction -> one outgoing direction, that is, the perfect reflection direction.
+inline
 void reflect(light::Ray& ray, light::Vector normal) {
 	auto cost = ray.direction.dot(normal);
 	ray.direction = (ray.direction - normal * (cost * 2.f)).normalized();
@@ -37,22 +41,24 @@ void reflect(light::Ray& ray, light::Vector normal) {
 
 // Glass/refractive BRDF - we use the vector version of Snell's law and Fresnel's law
 // to compute the outgoing reflection and refraction directions and probability weights.
+inline
 void refract(light::Ray& ray, light::Vector normal,
-						 const light::RayTracerContext& tracer, float rnd1) {
-	auto n = tracer.refractiveIndex;
-	auto R0 = (1.0-n)/(1.0+n);
-	R0 = R0*R0;
+						 float ri, float rnd1) {
+	auto R0 = (1.f - ri)/(1.f + ri);
+	R0 = R0 * R0;
 	if(normal.dot(ray.direction) > 0) { // we're inside the medium
 		normal = -normal;
 	} else {
-		n = 1 / n;
+		ri = 1.f / ri;
 	}
 	auto cost1 = -normal.dot(ray.direction); // cosine of theta_1
-	auto cost2 = 1.0 - n*n*(1.0-cost1*cost1); // cosine of theta_2
-	auto Rprob = R0 + (1.0-R0) * powf(1.0 - cost1, 5.0); // Schlick-approximation
+	auto cost2 = 1.f - ri * ri * (1.f - cost1 * cost1); // cosine of theta_2
+	auto Rprob = R0 + (1.f - R0) * powf(1.f - cost1, 5.f); // Schlick-approximation
 	if (cost2 > 0 && rnd1 > Rprob) { // refraction direction
-		ray.direction = ((ray.direction*n)+(normal*(n*cost1-sqrt(cost2)))).normalized();
+		ray.direction = ((ray.direction * ri) + (normal*(ri*cost1 - sqrtf(cost2)))).normalized();
 	} else { // reflection direction
-		ray.direction = (ray.direction+normal*(cost1*2)).normalized();
+		ray.direction = (ray.direction + normal*(cost1*2.f)).normalized();
 	}
 }
+
+} // end namespace light

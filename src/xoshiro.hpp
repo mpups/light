@@ -12,6 +12,7 @@ using State = std::array<uint64_t, 2>;
 
 inline std::uint64_t rotl(std::uint64_t x, int k) { return (x << k) | (x >> (64 - k)); }
 
+inline
 uint64_t splitmix64(uint64_t z) {
 	z += 0x9e3779b97f4a7c15;
 	z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9;
@@ -20,7 +21,7 @@ uint64_t splitmix64(uint64_t z) {
 }
 
 // Seed the generator using splitmix64:
-void seed(State &s, uint64_t seed) {
+inline void seed(State &s, uint64_t seed) {
 	s[0] = splitmix64(seed);
 	s[1] = splitmix64(s[0]);
 }
@@ -40,7 +41,7 @@ inline uint64_t next128ss(State &s) {
 // This is the jump function for the generator. It is equivalent
 // to 2^64 calls to next128ss(); it can be used to generate
 // 2^64 non-overlapping subsequences for parallel computations.
-void jump(State &s) {
+inline void jump(State &s) {
 	static const uint64_t JUMP[] = { 0xdf900294d8f554a5, 0x170865df4b3201fc };
 
 	uint64_t s0 = 0;
