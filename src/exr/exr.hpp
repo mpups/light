@@ -19,8 +19,8 @@ void write(std::string fileName, const exr::Image& image);
 exr::Image read(std::string fileName);
 
 void writeTiled(std::string fileName,
-									 std::size_t imageWidth, std::size_t imageHeight,
-									 std::size_t tileWidth, std::size_t tileHeight,
-									 const std::vector<std::vector<float>>& tiledPixels);
+                   std::size_t imageWidth, std::size_t imageHeight,
+                   std::size_t tileWidth, std::size_t tileHeight,
+                   const std::vector<std::vector<float>>& tiledPixels);
 
 } // end namespace exr
