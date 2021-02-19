@@ -18,8 +18,8 @@ light::Vector trace(const light::Ray& cameraRay, const light::RayTracerContext& 
   bool hitEmitter = false;
   auto gen = job.getGenerators();
 
-  std::uint32_t depth = 0;
-  const std::uint32_t maxDepth = 20;
+  std::size_t depth = 0;
+  const std::size_t maxDepth = 20;
 
   // Loop to trace the ray through the scence and produce the ray path:
   auto ray = cameraRay;
@@ -67,7 +67,7 @@ light::Vector trace(const light::Ray& cameraRay, const light::RayTracerContext& 
   }
 
   job.totalRayCasts += contributions.size();
-  job.maxPathLength = std::max(job.maxPathLength, contributions.size());
+  job.maxPathLength = std::max(job.maxPathLength, depth);
   job.nonZeroContribution = hitEmitter;
 
   // Combine all the material contributions along the ray path:
