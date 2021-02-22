@@ -24,8 +24,8 @@ extern float intersectionEpsilon;
 
 inline
 std::pair<bool, float> rouletteWeight(float rnd1, const float stopProb) {
-  if (rnd1 <= stopProb) { return std::make_pair(true, 1.0); }
-  return std::make_pair(false, 1.0 / (1.0 - stopProb));
+  if (rnd1 <= stopProb) { return std::make_pair(true, 1.f); }
+  return std::make_pair(false, 1.f / (1.f - stopProb));
 }
 
 struct Ray {
@@ -204,7 +204,7 @@ Vector pixelToRay(float x, float y, std::uint32_t width, std::uint32_t height) {
   auto tanfovy = tan(fovy);
   return Vector(((2*x-w)/w) * tanfovx,
         -((2*y-h)/h) * tanfovy,
-        -1.0);
+        -1.f);
 }
 
 inline
@@ -245,7 +245,7 @@ orthonormalSystem(const Vector& v1) {
       float invLen = 1.f / std::sqrt(v1x2 + v1z2);
       v2 = Vector(-v1z * invLen, 0.f, v1x * invLen);
     } else {
-      float invLen = 1.0f / std::sqrt(v1y2 + v1z2);
+      float invLen = 1.f / std::sqrt(v1y2 + v1z2);
       v2 = Vector(0.f, v1z * invLen, -v1y * invLen);
     }
     return std::make_tuple(v2, v1.cross(v2), v1);
