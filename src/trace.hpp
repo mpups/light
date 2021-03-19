@@ -37,7 +37,7 @@ light::Vector trace(const light::Ray& cameraRay,
     }
 
     // Compute hit point and advance the ray to the intersection:
-    Intersection intersection = tracer.scene.intersect(ray);
+    const auto intersection = tracer.scene.intersect(ray);
     if (!intersection) { break; }
 
     if (job.pathCapture) {

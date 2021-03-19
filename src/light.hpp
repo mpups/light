@@ -59,15 +59,28 @@ struct Material {
   bool emissive;
 };
 
-struct Plane {
+struct PrimitiveBase {
+  virtual Vector normal(const Vector&) const { return Vector(0.f, 1.f, 0.f); }
+  virtual float intersect(const Ray&) const { return 0.f; }
+};
+
+struct Object {
+  PrimitiveBase* primitive;
+  Material material;
+
+  Object(PrimitiveBase* p, Vector c, Vector e, Material::Type m)
+    : primitive(p), material(c, e, m) {}
+};
+
+struct Plane : PrimitiveBase {
   Vector n;
   float d;
   Plane(const Vector& normal, float offset) : n(normal.normalized()), d(offset) {}
   ~Plane() {}
 
-  Vector normal(const Vector&) const { return n; }
+  Vector normal(const Vector&) const override { return n; }
 
-  float intersect(const Ray& ray) const {
+  float intersect(const Ray& ray) const override {
     auto angle = n.dot(ray.direction);
     if (angle != 0.f) {
       auto t = -((n.dot(ray.origin)) + d) / angle;
@@ -76,14 +89,9 @@ struct Plane {
 
     return 0.f;
   }
-
-  Material material;
-  void setMaterial(Vector c, Vector e, Material::Type m) {
-    material = Material(c, e, m);
-  }
 };
 
-struct Disc {
+struct Disc : PrimitiveBase {
   Vector n;
   Vector c;
   float d;
@@ -92,9 +100,9 @@ struct Disc {
     : n(normal.normalized()), c(centre), d(std::abs(centre.dot(n))), r2(radius*radius) {}
   ~Disc() {}
 
-  Vector normal(const Vector&) const { return n; }
+  Vector normal(const Vector&) const override { return n; }
 
-  float intersect(const Ray& ray) const {
+  float intersect(const Ray& ray) const override {
     auto angle = n.dot(ray.direction);
     if (angle != 0.f) {
       auto t = -((n.dot(ray.origin)) + d) / angle;
@@ -109,14 +117,9 @@ struct Disc {
 
     return 0.f;
   }
-
-  Material material;
-  void setMaterial(Vector c, Vector e, Material::Type m) {
-    material = Material(c, e, m);
-  }
 };
 
-  struct Sphere {
+struct Sphere : PrimitiveBase {
   const Vector centre;
   const float radius;
   const float radius2;
@@ -124,7 +127,7 @@ struct Disc {
   Sphere(Vector c, float r) : centre(c), radius(r), radius2(r*r) {}
   ~Sphere() {}
 
-  float intersect(const Ray& ray) const {
+  float intersect(const Ray& ray) const override {
     Vector f = centre - ray.origin;
     auto tca = f.dot(ray.direction);
     if (tca < 0.f) { return 0.f; }
@@ -142,124 +145,45 @@ struct Disc {
     return t0;
   }
 
-  Vector normal(const Vector& point) const {
+  Vector normal(const Vector& point) const override {
     return (point - centre).normalized();
-  }
-
-  Material material;
-  void setMaterial(Vector c, Vector e, Material::Type m) {
-    material = Material(c, e, m);
   }
 };
 
 struct Intersection {
-  using ObjectId = std::pair<std::size_t, std::size_t>;
-  ObjectId objectId;
-  Material* material;
+  PrimitiveBase* primitive;
+  const Material* material;
   Vector normal;
   float t;
   bool valid;
-  Intersection() : t(std::numeric_limits<float>::infinity()), valid(false) {}
-  Intersection(ObjectId id, Material* m, float t) : objectId(id), material(m), t(t), valid(true) {}
-  operator bool() { return valid; }
+  Intersection() : primitive(nullptr), material(nullptr), t(std::numeric_limits<float>::infinity()), valid(false) {}
+  Intersection(PrimitiveBase* obj, const Material* m, float t) : primitive(obj), material(m), t(t), valid(true) {}
+  operator bool() const { return valid; }
 };
 
-template <class T>
-struct Object {
-  T* object;
-  Vector colour;
-  Vector emission;
-  Material::Type type;
-};
-
-template <std::size_t NumSpheres, std::size_t NumPlanes,
-          std::size_t NumDiscs, std::size_t MaxEmmitters=5>
-  struct Scene {
-  Scene(
-    std::array<Object<Sphere>, NumSpheres> sph,
-    std::array<Object<Plane>, NumPlanes> pln,
-    std::array<Object<Disc>, NumDiscs> dsc
-  ) : spheres(sph), planes(pln), discs(dsc) {
-    for (auto i = 0u; i < spheres.size(); ++i) {
-      auto& s = spheres[i];
-      s.object->setMaterial(s.colour, s.emission, s.type);
-      if (s.object->material.emissive) {
-        emitters.push_back(std::make_pair(ObjectType::SPHERE, i));
-      }
-    }
-    for (auto i = 0u; i < planes.size(); ++i) {
-      auto& p = planes[i];
-      p.object->setMaterial(p.colour, p.emission, p.type);
-      if (p.object->material.emissive) {
-        emitters.push_back(std::make_pair(ObjectType::PLANE, i));
-      }
-    }
-    for (auto i = 0u; i < discs.size(); ++i) {
-      auto& d = discs[i];
-      d.object->setMaterial(d.colour, d.emission, d.type);
-      if (d.object->material.emissive) {
-        emitters.push_back(std::make_pair(ObjectType::DISC, i));
-      }
-    }
-  }
-
+template <std::size_t NumObjects>
+struct Scene {
+  Scene(std::array<Object, NumObjects> obj) : objects(obj) {}
   ~Scene() {}
   Scene(const Scene&) = delete;
 
-  enum ObjectType {
-    SPHERE = 0,
-    PLANE,
-    DISC,
-    NUM_OBJECTS
-  };
-
-  std::array<Object<Sphere>, NumSpheres> spheres;
-  std::array<Object<Plane>, NumPlanes> planes;
-  std::array<Object<Disc>, NumDiscs> discs;
-  ArrayStack<Intersection::ObjectId, MaxEmmitters> emitters;
+  std::array<Object, NumObjects> objects;
 
   Intersection intersect(Ray& ray) const {
     Intersection closestIntersection;
 
-    for (auto i = 0u; i < spheres.size(); ++i) {
-      auto& o = *spheres[i].object;
-      auto t = o.intersect(ray);
+    for (auto i = 0u; i < objects.size(); ++i) {
+      auto& o = objects[i];
+      auto t = o.primitive->intersect(ray);
       if (t > intersectionEpsilon && t < closestIntersection.t) {
-        closestIntersection = Intersection(
-          std::make_pair(ObjectType::SPHERE, i), &o.material, t);
+        closestIntersection = Intersection(o.primitive, &o.material, t);
       }
     }
 
-    for (auto i = 0u; i < planes.size(); ++i) {
-      auto& o = *planes[i].object;
-      auto t = o.intersect(ray);
-      if (t > intersectionEpsilon && t < closestIntersection.t) {
-        closestIntersection = Intersection(
-          std::make_pair(ObjectType::PLANE, i), &o.material, t);
-      }
-    }
-
-    for (auto i = 0u; i < discs.size(); ++i) {
-      auto& o = *discs[i].object;
-      auto t = o.intersect(ray);
-      if (t > intersectionEpsilon && t < closestIntersection.t) {
-        closestIntersection = Intersection(
-          std::make_pair(ObjectType::DISC, i), &o.material, t);
-      }
-    }
-
-    if (std::isfinite(closestIntersection.t)) {
+    if (closestIntersection) {
       // Step the ray and compute the normal:
       ray.origin += ray.direction * closestIntersection.t;
-      const std::size_t objType = closestIntersection.objectId.first;
-      const std::size_t objIndex = closestIntersection.objectId.second;
-      if (objType == ObjectType::SPHERE) {
-        closestIntersection.normal = spheres[objIndex].object->normal(ray.origin);
-      } else if (objType == ObjectType::PLANE) {
-        closestIntersection.normal = planes[objIndex].object->normal(ray.origin);
-      } else if (objType == ObjectType::DISC) {
-        closestIntersection.normal = discs[objIndex].object->normal(ray.origin);
-      }
+      closestIntersection.normal = closestIntersection.primitive->normal(ray.origin);
     }
 
     return closestIntersection;

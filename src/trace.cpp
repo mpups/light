@@ -196,27 +196,23 @@ int main(int argc, char** argv) {
   constexpr auto specular = light::Material::Type::specular;
   constexpr auto refractive = light::Material::Type::refractive;
   constexpr auto diffuse = light::Material::Type::diffuse;
-  light::Scene<6, 6, 1> scene(
-    {
-      light::Object<light::Sphere>{&spheres[0], Vec(4.f, 8.f, 4.f), zero, specular},
-      light::Object<light::Sphere>{&spheres[1], Vec(10.f, 10.f, 1.f), zero, refractive}, // Glass sphere
-      light::Object<light::Sphere>{&spheres[2], sphereColour, zero, diffuse}, // Diffuse sphere
-      light::Object<light::Sphere>{&spheres[3], zero, lightB, specular}, // Small light red
-      light::Object<light::Sphere>{&spheres[4], zero, lightG, specular}, // Small light green
-      light::Object<light::Sphere>{&spheres[5], zero, lightR, specular}  // Small light blue
-    },
-    {
-      light::Object<light::Plane>{&planes[0], wallColour1, zero, diffuse}, // Bottom plane
-      light::Object<light::Plane>{&planes[1], wallColour1, zero, diffuse}, // Back plane
-      light::Object<light::Plane>{&planes[2], wallColour2, zero, diffuse}, // Left plane
-      light::Object<light::Plane>{&planes[3], wallColour3, zero, diffuse}, // Right plane
-      light::Object<light::Plane>{&planes[4], wallColour1, zero, diffuse}, // Ceiling plane
-      light::Object<light::Plane>{&planes[5], wallColour1, zero, diffuse}, // Front plane
-    },
-    {
-      light::Object<light::Disc>{&discs[0], Vec(0,0,0), lightW, diffuse}, // Ceiling light
-    }
-  );
+  light::Scene<13> scene({
+      light::Object(&spheres[0], Vec(4.f, 8.f, 4.f), zero, specular),
+      light::Object(&spheres[1], Vec(10.f, 10.f, 1.f), zero, refractive), // Glass sphere
+      light::Object(&spheres[2], sphereColour, zero, diffuse), // Diffuse sphere
+      light::Object(&spheres[3], zero, lightB, specular), // Small light red
+      light::Object(&spheres[4], zero, lightG, specular), // Small light green
+      light::Object(&spheres[5], zero, lightR, specular), // Small light blue
+
+      light::Object(&planes[0], wallColour1, zero, diffuse), // Bottom plane
+      light::Object(&planes[1], wallColour1, zero, diffuse), // Back plane
+      light::Object(&planes[2], wallColour2, zero, diffuse), // Left plane
+      light::Object(&planes[3], wallColour3, zero, diffuse), // Right plane
+      light::Object(&planes[4], wallColour1, zero, diffuse), // Ceiling plane
+      light::Object(&planes[5], wallColour1, zero, diffuse), // Front plane
+
+      light::Object(&discs[0], Vec(0,0,0), lightW, diffuse), // Ceiling light
+  });
 
   RayTracerContext<decltype(scene)> tracer(scene);
 
