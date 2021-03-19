@@ -59,72 +59,29 @@ struct Material {
   bool emissive;
 };
 
-struct Primitive {
-  Material material;
-
-  Primitive() {}
-  ~Primitive() {}
-
-  void setMaterial(Vector c, Vector e, Material::Type m) {
-    material = Material(c, e, m);
-  }
-
-  static constexpr float nan = std::numeric_limits<float>::quiet_NaN();
-  virtual Vector normal(const Vector&) const { return Vector(nan, nan, nan); }
-  virtual float intersect(const Ray&) const { return nan;}
-  };
-
-struct Intersection {
-  const Primitive* object;
-  const Material* material;
-  float t;
-  Intersection() : object(nullptr), t(std::numeric_limits<float>::infinity()) {}
-  Intersection(const Primitive* const o, float t) : object(o), material(&o->material), t(t) {}
-  operator bool() { return object != nullptr; }
+struct PrimitiveBase {
+  virtual Vector normal(const Vector&) const { return Vector(0.f, 1.f, 0.f); }
+  virtual float intersect(const Ray&) const { return 0.f; }
 };
 
 
 struct Object {
-  Primitive* object;
-  Vector colour;
-  Vector emission;
-  Material::Type type;
+  PrimitiveBase* primitive;
+  Material material;
+
+  Object(PrimitiveBase* p, Vector c, Vector e, Material::Type m)
+    : primitive(p), material(c, e, m) {}
 };
 
-struct Scene {
-  Scene(std::array<Object, 11> o) : objects(o) {
-    for (auto& s : objects) {
-      s.object->setMaterial(s.colour, s.emission, s.type);
-    }
-  }
-  ~Scene() {}
-  Scene(const Scene&) = delete;
-
-  std::array<Object, 11> objects;
-
-  Intersection intersect(const Ray& ray) const {
-    Intersection closestIntersection;
-    // Dumb linear search:
-    for (std::size_t i = 0; i < objects.max_size(); ++i) {
-      auto o = objects[i].object;
-      auto t = o->intersect(ray);
-      if (t > intersectionEpsilon && t < closestIntersection.t) {
-        closestIntersection = Intersection(o, t);
-      }
-    }
-    return closestIntersection;
-  }
-};
-
-struct Plane : public Primitive {
+struct Plane : PrimitiveBase {
   Vector n;
   float d;
   Plane(const Vector& normal, float offset) : n(normal.normalized()), d(offset) {}
   ~Plane() {}
 
-  virtual Vector normal(const Vector&) const override { return n; }
+  Vector normal(const Vector&) const override { return n; }
 
-  virtual float intersect(const Ray& ray) const override {
+  float intersect(const Ray& ray) const override {
     auto angle = n.dot(ray.direction);
     if (angle != 0.f) {
       auto t = -((n.dot(ray.origin)) + d) / angle;
@@ -135,7 +92,7 @@ struct Plane : public Primitive {
   }
 };
 
-struct Disc : public Primitive {
+struct Disc : PrimitiveBase {
   Vector n;
   Vector c;
   float d;
@@ -144,9 +101,9 @@ struct Disc : public Primitive {
     : n(normal.normalized()), c(centre), d(std::abs(centre.dot(n))), r2(radius*radius) {}
   ~Disc() {}
 
-  virtual Vector normal(const Vector&) const override { return n; }
+  Vector normal(const Vector&) const override { return n; }
 
-  virtual float intersect(const Ray& ray) const override {
+  float intersect(const Ray& ray) const override {
     auto angle = n.dot(ray.direction);
     if (angle != 0.f) {
       auto t = -((n.dot(ray.origin)) + d) / angle;
@@ -163,7 +120,7 @@ struct Disc : public Primitive {
   }
 };
 
-struct Sphere : public Primitive {
+struct Sphere : PrimitiveBase {
   const Vector centre;
   const float radius;
   const float radius2;
@@ -171,7 +128,7 @@ struct Sphere : public Primitive {
   Sphere(Vector c, float r) : centre(c), radius(r), radius2(r*r) {}
   ~Sphere() {}
 
-  virtual float intersect(const Ray& ray) const override {
+  float intersect(const Ray& ray) const override {
     Vector f = centre - ray.origin;
     auto tca = f.dot(ray.direction);
     if (tca < 0.f) { return 0.f; }
@@ -189,8 +146,48 @@ struct Sphere : public Primitive {
     return t0;
   }
 
-  virtual Vector normal(const Vector& point) const override {
+  Vector normal(const Vector& point) const override {
     return (point - centre).normalized();
+  }
+};
+
+struct Intersection {
+  PrimitiveBase* primitive;
+  const Material* material;
+  Vector normal;
+  float t;
+  bool valid;
+  Intersection() : primitive(nullptr), material(nullptr), t(std::numeric_limits<float>::infinity()), valid(false) {}
+  Intersection(PrimitiveBase* obj, const Material* m, float t) : primitive(obj), material(m), t(t), valid(true) {}
+  operator bool() const { return valid; }
+};
+
+template <std::size_t NumObjects>
+struct Scene {
+  Scene(std::array<Object, NumObjects> obj) : objects(obj) {}
+  ~Scene() {}
+  Scene(const Scene&) = delete;
+
+  std::array<Object, NumObjects> objects;
+
+  Intersection intersect(Ray& ray) const {
+    Intersection closestIntersection;
+
+    for (auto i = 0u; i < objects.size(); ++i) {
+      auto& o = objects[i];
+      auto t = o.primitive->intersect(ray);
+      if (t > intersectionEpsilon && t < closestIntersection.t) {
+        closestIntersection = Intersection(o.primitive, &o.material, t);
+      }
+    }
+
+    if (closestIntersection) {
+      // Step the ray and compute the normal:
+      ray.origin += ray.direction * closestIntersection.t;
+      closestIntersection.normal = closestIntersection.primitive->normal(ray.origin);
+    }
+
+    return closestIntersection;
   }
 };
 
@@ -251,14 +248,15 @@ orthonormalSystem(const Vector& v1) {
     return std::make_tuple(v2, v1.cross(v2), v1);
 }
 
+template <typename SceneType>
 struct RayTracerContext {
-  const Scene& scene;
+  const SceneType& scene;
   int depth;
   float refractiveIndex;
   std::size_t rouletteDepth;
   float stopProb;
 
-  RayTracerContext(const Scene& s) : scene(s), depth(0) {}
+  RayTracerContext(const SceneType& s) : scene(s), depth(0) {}
 };
 
 struct Contribution {

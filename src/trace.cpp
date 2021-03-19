@@ -25,8 +25,8 @@ getArgs(int argc, char** argv) {
     ("tile-height", po::value<std::uint32_t>()->default_value(16), "Height of tile per job.")
     ("samples,s", po::value<std::uint32_t>()->default_value(32), "Samples per pixel.")
     ("refractive-index,n", po::value<float>()->default_value(1.5), "Refractive index.")
-    ("roulette-depth", po::value<float>()->default_value(5), "Number of bounces before rays are randomly stopped.")
-    ("stop-prob", po::value<float>()->default_value(0.1), "Probability of a ray being stopped.")
+    ("roulette-depth", po::value<std::size_t>()->default_value(3), "Number of bounces before rays are randomly stopped.")
+    ("stop-prob", po::value<float>()->default_value(0.2), "Probability of a ray being stopped.")
     ("aa-noise-scale,a", po::value<float>()->default_value(1.0/700), "Scale for pixel space anti-aliasing noise.")
     ("seed", po::value<std::uint64_t>()->default_value(1), "Seed for random number generation.")
     ("epsilon", po::value<float>()->default_value(light::epsilon), "Epsilon used in ray tracing, defaults to the machine epsilon.")
@@ -94,6 +94,7 @@ void cvImageFromJobs(std::vector<TraceTileJob>& jobs, cv::Mat& image, float scal
     });
   }
 }
+
 struct RayDebug {
   std::size_t row = 0;
   std::size_t col = 0;
@@ -113,7 +114,9 @@ void onMouseClick(int event, int x, int y, int, void* data) {
   }
 }
 
-void drawDebugRays(const RayDebug& debug, const light::RayTracerContext& tracer,
+template <typename SceneType>
+void drawDebugRays(const RayDebug& debug,
+                   const light::RayTracerContext<SceneType>& tracer,
                    xoshiro::State rngState, cv::Mat& image) {
   using namespace light;
   TraceTileJob debugJob(debug.row, debug.col, debug.row, debug.col, 1,
@@ -152,32 +155,69 @@ int main(int argc, char** argv) {
   const auto args = getArgs(argc, argv);
 
   using namespace light;
+  using Vec = light::Vector;
+  const Vec zero(0.f, 0.f, 0.f);
+  const Vec one(1.f, 1.f, 1.f);
+  const auto X = Vec(1.f, 0.f, 0.f);
+  const auto Y = Vec(0.f, 1.f, 0.f);
+  const auto Z = Vec(0.f, 0.f, 1.f);
 
-  Vector zero(0, 0, 0);
-  const auto X = Vector(1, 0, 0);
-  const auto Y = Vector(0, 1, 0);
-  const auto Z = Vector(0, 0, 1);
-  Vector light1(10000, 5950, 4370);
-  Vector light2(500, 600, 1000);
+  // For now we will hard code the scene in the codelet.
+  // Eventually the scene will be stored in input tensors:
+  light::Sphere spheres[6] = {
+    light::Sphere(Vec(-0.75f, -1.45f, -4.4f), 1.05f),
+    light::Sphere(Vec(2.0f, -2.05f, -3.7f), 0.5f),
+    light::Sphere(Vec(-1.75f, -1.95f, -3.1f), 0.6f),
+    light::Sphere(Vec(-1.12f, -2.3f, -3.5f), 0.2f),
+    light::Sphere(Vec(-0.28f, -2.34f, -3.f), 0.2f),
+    light::Sphere(Vec(.58f, -2.39f, -2.6f), 0.2f)
+  };
+  light::Plane planes[6] = {
+    light::Plane(Y, 2.5f),
+    light::Plane(Z, 5.5f),
+    light::Plane(X, 2.75f),
+    light::Plane(-X, 2.75f),
+    light::Plane(-Y, 3.f),
+    light::Plane(-Z, .5f)
+  };
+  light::Disc discs[1] = {
+    light::Disc(-Y, Vec(0.f, 2.9999f, -4.f), .7f)
+  };
 
-  Scene scene({
-    Object{new Sphere(Vector(-0.75,-1.45,-4.4), 1.05), Vector(4,8,4), zero, Material::Type::specular},
-    Object{new Sphere(Vector(2.0,-2.05,-3.7), 0.5), Vector(10,10,1), zero, Material::Type::refractive}, // Glass sphere
-    Object{new Sphere(Vector(-1.75,-1.95,-3.1), 0.6), Vector(4,4,12), zero, Material::Type::diffuse}, // Diffuse sphere
-    Object{new Plane(Y, 2.5), Vector(6,6,6), zero, Material::Type::diffuse}, // Bottom plane
-    Object{new Plane(Z, 5.5), Vector(6,6,6), zero, Material::Type::diffuse}, // Back plane
-    Object{new Plane(X, 2.75), Vector(10,2,2), zero, Material::Type::diffuse}, // Left plane
-    Object{new Plane(-X, 2.75), Vector(2,10,2), zero, Material::Type::diffuse}, // Right plane
-    Object{new Plane(-Y, 3.0), Vector(6,6,6), zero, Material::Type::diffuse}, // Ceiling plane
-    Object{new Plane(-Z, 0.5), Vector(6,6,6), zero, Material::Type::diffuse}, // Front plane
-    Object{new Disc(-Y, Vector(0, 2.9999, -4), 0.7), Vector(0,0,0), light1, Material::Type::diffuse}, // Ceiling light
-    Object{new Sphere(Vector(-1.12,-2.3,-3.5), 0.2f), Vector(100,200,100), light2, Material::Type::specular} // Small ball light
+  const Vec lightW(8000, 8000, 8000);
+  const Vec lightR(1000, 367, 367);
+  const Vec lightG(467, 1000, 434);
+  const Vec lightB(500, 600, 1000);
+  const float colourGain = 15.f;
+  const auto sphereColour = Vec(1.f, .89f, .55f) * colourGain;
+  const auto wallColour1 = Vec(.98f, .76f, .66f) * colourGain;
+  const auto wallColour2 = Vec(.93f, .43f, .48f) * colourGain;
+  const auto wallColour3 = Vec(.27f, .31f, .38f) * colourGain;
+  constexpr auto specular = light::Material::Type::specular;
+  constexpr auto refractive = light::Material::Type::refractive;
+  constexpr auto diffuse = light::Material::Type::diffuse;
+  light::Scene<13> scene({
+      light::Object(&spheres[0], Vec(4.f, 8.f, 4.f), zero, specular),
+      light::Object(&spheres[1], Vec(10.f, 10.f, 1.f), zero, refractive), // Glass sphere
+      light::Object(&spheres[2], sphereColour, zero, diffuse), // Diffuse sphere
+      light::Object(&spheres[3], zero, lightB, specular), // Small light red
+      light::Object(&spheres[4], zero, lightG, specular), // Small light green
+      light::Object(&spheres[5], zero, lightR, specular), // Small light blue
+
+      light::Object(&planes[0], wallColour1, zero, diffuse), // Bottom plane
+      light::Object(&planes[1], wallColour1, zero, diffuse), // Back plane
+      light::Object(&planes[2], wallColour2, zero, diffuse), // Left plane
+      light::Object(&planes[3], wallColour3, zero, diffuse), // Right plane
+      light::Object(&planes[4], wallColour1, zero, diffuse), // Ceiling plane
+      light::Object(&planes[5], wallColour1, zero, diffuse), // Front plane
+
+      light::Object(&discs[0], Vec(0,0,0), lightW, diffuse), // Ceiling light
   });
 
-  RayTracerContext tracer(scene);
+  RayTracerContext<decltype(scene)> tracer(scene);
 
   tracer.refractiveIndex = args.at("refractive-index").as<float>();
-  tracer.rouletteDepth = args.at("roulette-depth").as<float>();
+  tracer.rouletteDepth = args.at("roulette-depth").as<std::size_t>();
   tracer.stopProb = args.at("stop-prob").as<float>();
   epsilon = args.at("epsilon").as<float>();
   intersectionEpsilon = args.at("intersection-epsilon").as<float>();

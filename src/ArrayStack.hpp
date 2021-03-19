@@ -11,6 +11,7 @@ public:
     ArrayStack() : nexti(0) {}
     ~ArrayStack() {}
 
+    bool full() const { return nexti == Capacity; }
     constexpr std::size_t capacity() const { return Capacity; }
     bool empty() const { return nexti == 0; }
     std::size_t size() const { return nexti; }
