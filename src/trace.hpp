@@ -61,7 +61,7 @@ light::Vector trace(const light::Ray& cameraRay,
     } else if (intersection.material->type == Material::Type::refractive) {
       const auto rnd1 = xoshiro::uniform_0_1(gen.rng);
       refract(ray, intersection.normal, tracer.refractiveIndex, rnd1);
-      contributions.push_back({zero, 1.15f * rrFactor, Contribution::Type::REFLECT});
+      contributions.push_back({zero, 1.15f * rrFactor, Contribution::Type::REFRACT});
     }
 
     depth += 1;
@@ -79,19 +79,25 @@ light::Vector trace(const light::Ray& cameraRay,
       contributions.pop_back();
 
       switch (c.type) {
-      case Contribution::Type::DIFFUSE:
+      case light::Contribution::Type::DIFFUSE:
+        // Diffuse materials modulate the colour being carried back
+        // along the light path (scaled by the importance weight):
         total = total.cwiseProduct(c.clr) * c.weight;
         break;
-      case Contribution::Type::EMIT:
+        // Emitters add their colour to the colour being carried back
+        // along the light path (scaled by the importance weight):
+      case light::Contribution::Type::EMIT:
         total += c.clr * c.weight;
         break;
-      case Contribution::Type::SPECULAR:
+        // Specular reflections/refractions have no colour contribution but
+        // their importance sampling weights must still be applied:
+      case light::Contribution::Type::SPECULAR:
+      case light::Contribution::Type::REFRACT:
         total *= c.weight;
         break;
-      case Contribution::Type::REFLECT:
-        total *= c.weight;
-        break;
-      case Contribution::Type::SKIP:
+      // Sometimes it is useful to be able to skip certain
+      // contributions when debugging.
+      case light::Contribution::Type::SKIP:
       default:
         break;
       }

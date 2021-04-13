@@ -264,7 +264,7 @@ struct Contribution {
     DIFFUSE,
     EMIT,
     SPECULAR,
-    REFLECT,
+    REFRACT,
     SKIP
   };
   Vector clr;
