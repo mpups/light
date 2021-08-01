@@ -46,15 +46,17 @@ void refract(light::Ray& ray, light::Vector normal,
              float ri, float rnd1) {
   auto R0 = (1.f - ri)/(1.f + ri);
   R0 = R0 * R0;
-  if(normal.dot(ray.direction) > 0) { // we're inside the medium
+  if(normal.dot(ray.direction) > 0.f) { // we're inside the medium
     normal = -normal;
   } else {
     ri = 1.f / ri;
   }
   auto cost1 = -normal.dot(ray.direction); // cosine of theta_1
   auto cost2 = 1.f - ri * ri * (1.f - cost1 * cost1); // cosine of theta_2
-  auto Rprob = R0 + (1.f - R0) * powf(1.f - cost1, 5.f); // Schlick-approximation
-  if (cost2 > 0 && rnd1 > Rprob) { // refraction direction
+  auto schlickBase = 1.f - cost1;
+  auto schlickBase2 = schlickBase * schlickBase;
+  auto Rprob = R0 + (1.f - R0) * (schlickBase2 * schlickBase * schlickBase2); // Schlick-approximation
+  if (cost2 > 0.f && rnd1 > Rprob) { // refraction direction
     ray.direction = ((ray.direction * ri) + (normal*(ri*cost1 - sqrtf(cost2)))).normalized();
   } else { // reflection direction
     ray.direction = (ray.direction + normal*(cost1*2.f)).normalized();

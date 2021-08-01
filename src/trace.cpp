@@ -124,7 +124,7 @@ void drawDebugRays(const RayDebug& debug,
   debugJob.pathCapture = true;
   debugJob.rngState = rngState;
   Vector cam = pixelToRay(debug.col, debug.row, image.cols, image.rows);
-  const Ray ray(Vector(0, 0, 0), cam);
+  const Ray ray(Vector(0.f, 0.f, 0.f), cam);
   std::size_t maxTries = 100;
   while (--maxTries && debugJob.nonZeroContribution == false) {
     trace(ray, tracer, debugJob);
@@ -211,7 +211,7 @@ int main(int argc, char** argv) {
       light::Object(&planes[4], wallColour1, zero, diffuse), // Ceiling plane
       light::Object(&planes[5], wallColour1, zero, diffuse), // Front plane
 
-      light::Object(&discs[0], Vec(0,0,0), lightW, diffuse), // Ceiling light
+      light::Object(&discs[0], Vec(0.f, 0.f, 0.f), lightW, diffuse), // Ceiling light
   });
 
   RayTracerContext<decltype(scene)> tracer(scene);
@@ -232,7 +232,7 @@ int main(int argc, char** argv) {
 
   Image pixels(height);
   for(auto &row: pixels) {
-    row.resize(width, Vector(0, 0, 0));
+    row.resize(width, Vector(0.f, 0.f, 0.f));
   }
 
   cv::Mat image(height, width, CV_8UC3);
@@ -263,7 +263,7 @@ int main(int argc, char** argv) {
         Vector cam = pixelToRay(col, row, width, height); // construct image plane coordinates
         Vector aaNoise(xoshiro::uniform_neg1_1(job.rngState), xoshiro::uniform_neg1_1(job.rngState), 0.f);
         cam += aaNoise * antiAliasingScale;
-        const Ray ray(Vector(0, 0, 0), cam);
+        const Ray ray(Vector(0.f, 0.f, 0.f), cam);
         auto color = trace(ray, tracer, job);
         p += color / spp; // write the contributions
       });

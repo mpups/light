@@ -10,8 +10,8 @@ light::Vector trace(const light::Ray& cameraRay,
                     const light::RayTracerContext<SceneType>& tracer,
                     TraceTileJob& job) {
   using namespace light;
-  static const Vector zero(0, 0, 0);
-  static const Vector one(1, 1, 1);
+  static const Vector zero(0.f, 0.f, 0.f);
+  static const Vector one(1.f, 1.f, 1.f);
   std::vector<Contribution> contributions;
   contributions.reserve(2*tracer.rouletteDepth);
   if (job.pathCapture) {
@@ -28,7 +28,7 @@ light::Vector trace(const light::Ray& cameraRay,
   auto ray = cameraRay;
   while (depth < maxDepth) {
     // Russian roulette ray termination:
-    float rrFactor = 1.0;
+    float rrFactor = 1.f;
     if (depth >= tracer.rouletteDepth) {
       bool stop;
       const float rnd1 = xoshiro::uniform_0_1(gen.rng);

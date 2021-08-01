@@ -197,10 +197,10 @@ Vector pixelToRay(float x, float y, std::uint32_t width, std::uint32_t height) {
   float h = height;
   float fovx = Pi/4;
   float fovy = (h/w) * fovx;
-  auto tanfovx = tan(fovx);
-  auto tanfovy = tan(fovy);
-  return Vector(((2*x-w)/w) * tanfovx,
-        -((2*y-h)/h) * tanfovy,
+  auto tanfovx = tanf(fovx);
+  auto tanfovy = tanf(fovy);
+  return Vector(((2.f*x-w)/w) * tanfovx,
+        -((2.f*y-h)/h) * tanfovy,
         -1.f);
 }
 
@@ -210,26 +210,26 @@ Vector vertexToPixel(Vector v, std::uint32_t width, std::uint32_t height) {
   float h = height;
   float fovx = Pi/4;
   float fovy = (h/w) * fovx;
-  auto tanfovx = tan(fovx);
-  auto tanfovy = tan(fovy);
+  auto tanfovx = tanf(fovx);
+  auto tanfovy = tanf(fovy);
   auto x = -v.x / v.z;
   auto y = v.y / v.z;
-  auto px = (w/2) * ((x/tanfovx) + 1.f);
-  auto py = (h/2) * ((y/tanfovy) + 1.f);
+  auto px = (w/2.f) * ((x/tanfovx) + 1.f);
+  auto py = (h/2.f) * ((y/tanfovy) + 1.f);
   return Vector(px, py, v.z);
 }
 
 inline
 Vector hemisphere(float u1, float u2) {
   const float r = sqrtf(1.f - u1*u1);
-  const float phi = 2 * Pi * u2;
-  return Vector(cos(phi)*r, sin(phi)*r, u1);
+  const float phi = 2.f * Pi * u2;
+  return Vector(cosf(phi)*r, sinf(phi)*r, u1);
 }
 
 inline
 std::tuple<Vector, Vector, Vector>
 orthonormalSystem(const Vector& v1) {
-    Vector v2(0, 0, 0);
+    Vector v2(0.f, 0.f, 0.f);
     Vector v1abs = v1.array().abs();
     Vector v1sq = v1.cwiseProduct(v1);
     const auto v1x = v1(0);

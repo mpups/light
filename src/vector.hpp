@@ -44,16 +44,16 @@ using Vector = Eigen::Vector3f;
   Vector cwiseProduct(const Vector &b) const {
     return Vector(x*b.x, y*b.y, z*b.z);
   }
-  Vector normalized() const { return *this * (1.f/std::sqrt(x*x + y*y + z*z)); }
+  Vector normalized() const { return *this * (1.f/sqrtf(x*x + y*y + z*z)); }
   float squaredNorm() const { return x*x + y*y + z*z; }
-  float norm() const { return std::sqrt(squaredNorm()); }
+  float norm() const { return sqrtf(squaredNorm()); }
   float dot(const Vector &b) const { return x*b.x + y*b.y + z*b.z; }
   Vector cross(const Vector &b) const {
     return Vector(y*b.z - z*b.y, z*b.x - x*b.z, x*b.y - y*b.x);
   }
-  const float& operator () (size_t i) const { return i==0 ? x : (i==1 ? y : z); }
+  const float& operator () (size_t i) const { return i == 0 ? x : (i == 1 ? y : z); }
   Vector abs() const {
-    return Vector(std::abs(x), std::abs(y), std::abs(z));
+    return Vector(fabsf(x), fabsf(y), fabsf(z));
   }
   const Vector& array() const { return *this; } // For Eigen compatibility only
   bool isZero() const { return x == 0.f && y == 0.f && z == 0.f; }
