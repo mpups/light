@@ -20,7 +20,7 @@ file(GLOB EXR_SRC ${PROJECT_SOURCE_DIR}/src/exr/*.hpp ${PROJECT_SOURCE_DIR}/src/
 
 add_library(exr ${EXR_SRC})
 link_directories(/usr/local/lib)
-target_link_libraries(exr OpenMP::OpenMP_CXX IlmImf)
+target_link_libraries(exr OpenMP::OpenMP_CXX IlmImf Half)
 
 file(GLOB TRACE_SRC ${PROJECT_SOURCE_DIR}/src/*.hpp ${PROJECT_SOURCE_DIR}/src/*.cpp)
 

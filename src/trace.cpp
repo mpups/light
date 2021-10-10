@@ -280,7 +280,8 @@ int main(int argc, char** argv) {
     // Save/display image at regular intervals and when done:
     if (s == spp - 1 || s == 1 || s % 64 == 0) {
       cvImageFromJobs(jobs, image, (spp-1)/(float)s);
-      exr::writeTiled(fileName + ".exr", width, height, tileWidth, tileHeight, pixelsFromJobs(jobs));
+      exr::writeTiled(fileName + ".exr", exr::DataType::FP16,
+                      width, height, tileWidth, tileHeight, pixelsFromJobs(jobs));
       cv::imwrite(fileName, image);
       if (gui) {
         if (debug.enabled) {

@@ -1,4 +1,5 @@
 #include "exr.hpp"
+#include "convert.hpp"
 
 #include <OpenEXR/ImfOutputFile.h>
 #include <OpenEXR/ImfHeader.h>
@@ -22,6 +23,18 @@ std::shared_ptr<spdlog::logger> logger() {
     return spdlog::get("exr_logger");
 }
 
+std::map<Imf::PixelType, std::size_t> bytesPerPixel = {
+  {Imf::PixelType::UINT, sizeof(std::uint32_t)},
+  {Imf::PixelType::HALF, sizeof(half)},
+  {Imf::PixelType::FLOAT, sizeof(float)}
+};
+
+std::map<DataType, Imf::PixelType> toImfType = {
+  {DataType::UI32, Imf::PixelType::UINT},
+  {DataType::FP16, Imf::PixelType::HALF},
+  {DataType::FP32, Imf::PixelType::FLOAT}
+};
+
 bool checkIsExr(std::string fileName) {
   std::ifstream f(fileName, std::ios_base::binary);
   char b[4];
@@ -39,8 +52,8 @@ void write(std::string fileName, const Image& image) {
     const auto& name = c.first;
     const auto& slice = c.second;
     logger()->info("Inserting channel {}", name);
-    header.channels().insert(name, Channel(FLOAT));
-    fb.insert(name, Slice(FLOAT, (char*)slice.data(),
+    header.channels().insert(name, Channel(PixelType::FLOAT));
+    fb.insert(name, Slice(PixelType::FLOAT, (char*)slice.data(),
               sizeof(float), sizeof(float) * image.width));
   }
 
@@ -86,39 +99,62 @@ Image read(std::string fileName) {
   return image;
 }
 
-void writeTiled(std::string fileName,
-                   std::size_t imageWidth, std::size_t imageHeight,
-                   std::size_t tileWidth, std::size_t tileHeight,
-                   const std::vector<std::vector<float>>& tiledPixels) {
+void writeTiled(std::string fileName, DataType fileDataType,
+                std::size_t imageWidth, std::size_t imageHeight,
+                std::size_t tileWidth, std::size_t tileHeight,
+                const std::vector<std::vector<float>>& tiledPixels) {
   using namespace Imf;
+  const auto outputType = toImfType.at(fileDataType);
+
   Header header(imageWidth, imageHeight);
-  header.channels().insert("R", Channel(FLOAT));
-  header.channels().insert("G", Channel(FLOAT));
-  header.channels().insert("B", Channel(FLOAT));
+  header.channels().insert("R", Channel(outputType));
+  header.channels().insert("G", Channel(outputType));
+  header.channels().insert("B", Channel(outputType));
   header.setTileDescription(TileDescription(tileWidth, tileHeight, ONE_LEVEL));
 
   std::vector<FrameBuffer> framebuffers;
   framebuffers.resize(tiledPixels.size());
 
+  const auto bpp = bytesPerPixel.at(outputType);
+  const auto colStride = 3 * bpp;
+  const auto rowStride = 3 * tileWidth * bpp;
+
+  std::vector<std::vector<std::uint32_t>> uintTiles;
+  if (outputType == PixelType::UINT) {
+    uintTiles = floatToUint(tiledPixels);
+  }
+
+  std::vector<std::vector<half>> halfTiles;
+  if (outputType == PixelType::HALF) {
+    halfTiles = floatToHalf(tiledPixels);
+  }
+
   #pragma omp parallel for schedule(dynamic)
-  for (std::size_t t = 0; t < tiledPixels.size(); ++t) {
+  for (auto t = 0u; t < tiledPixels.size(); ++t) {
     auto& tile = tiledPixels[t];
     auto& fb = framebuffers[t];
-    auto colStride = 3 * sizeof(float);
-    auto rowStride = 3 * tileWidth * sizeof(float);
-    fb.insert("R", Slice(FLOAT, (char*)tile.data(), colStride, rowStride, 1, 1, 0.0, true, true));
-    fb.insert("G", Slice(FLOAT, (char*)(tile.data() + 1), colStride, rowStride, 1, 1, 0.0, true, true));
-    fb.insert("B", Slice(FLOAT, (char*)(tile.data() + 2), colStride, rowStride, 1, 1, 0.0, true, true));
+    char* outData = (char*)tile.data();
+
+    if (outputType == PixelType::UINT) {
+      outData = (char*)uintTiles[t].data();
+    }
+
+    if (outputType == PixelType::HALF) {
+      outData = (char*)halfTiles[t].data();
+    }
+
+    fb.insert("R", Slice(outputType, outData, colStride, rowStride, 1, 1, 0.0, true, true));
+    fb.insert("G", Slice(outputType, outData + bpp, colStride, rowStride, 1, 1, 0.0, true, true));
+    fb.insert("B", Slice(outputType, outData + 2*bpp, colStride, rowStride, 1, 1, 0.0, true, true));
   }
 
   TiledOutputFile out(fileName.c_str(), header);
   std::size_t tx = 0;
   std::size_t ty = 0;
   std::size_t tilesX = imageWidth / tileWidth;
-  std::size_t tiles = framebuffers.size();
 
-  for (std::size_t t = 0; t < tiles; ++t) {
-    out.setFrameBuffer(framebuffers[t]);
+  for (const auto& fb : framebuffers) {
+    out.setFrameBuffer(fb);
     out.writeTiles(tx, tx, ty, ty);
     tx += 1;
     if (tx >= tilesX) {
