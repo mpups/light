@@ -16,7 +16,7 @@ namespace light {
 #ifdef USE_EIGEN
 using Vector = Eigen::Vector3f;
 #else
-  struct Vector {
+struct Vector {
   float x, y, z;
   Vector() {}
   Vector(float x0, float y0, float z0) : x(x0), y(y0), z(z0) {}
@@ -51,14 +51,14 @@ using Vector = Eigen::Vector3f;
   Vector cross(const Vector &b) const {
     return Vector(y*b.z - z*b.y, z*b.x - x*b.z, x*b.y - y*b.x);
   }
-  const float& operator () (size_t i) const { return i == 0 ? x : (i == 1 ? y : z); }
+  float operator () (size_t i) const { return i == 0 ? x : (i == 1 ? y : z); }
   Vector abs() const {
     return Vector(fabsf(x), fabsf(y), fabsf(z));
   }
   const Vector& array() const { return *this; } // For Eigen compatibility only
   bool isZero() const { return x == 0.f && y == 0.f && z == 0.f; }
   bool isNonZero() const { return x != 0.f || y != 0.f || z != 0.f; }
-};
+} __attribute__ ((packed));
 
 #endif
 

@@ -260,11 +260,14 @@ struct RayTracerContext {
 };
 
 struct Contribution {
-  enum class Type {
-    DIFFUSE,
+  enum class Type : uint8_t {
+    DIFFUSE=0u,
     EMIT,
     SPECULAR,
     REFRACT,
+    ESCAPED,
+    DEBUG,
+    END,
     SKIP
   };
   Vector clr;
