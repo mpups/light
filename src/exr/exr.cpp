@@ -13,7 +13,7 @@
 #include <OpenEXR/ImfPixelType.h>
 #include <OpenEXR/ImfPartType.h>
 
-#include <spdlog/spdlog.h>
+#include "logging.hpp"
 
 namespace exr {
 
