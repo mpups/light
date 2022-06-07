@@ -192,31 +192,32 @@ struct Scene {
 };
 
 inline
-Vector pixelToRay(float x, float y, std::uint32_t width, std::uint32_t height) {
+Vector pixelToRay(float x, float y, std::uint32_t width, std::uint32_t height, float fov) {
   float w = width;
   float h = height;
-  float fovx = Pi/4;
-  float fovy = (h/w) * fovx;
-  auto tanfovx = tanf(fovx);
-  auto tanfovy = tanf(fovy);
-  return Vector(((2.f*x-w)/w) * tanfovx,
-        -((2.f*y-h)/h) * tanfovy,
+  float aspect = w / h;
+  auto tanTheta = tanf(fov / 2.f);
+  x = (x / w) - .5f;
+  y = (y / h) - .5f;
+  return Vector(
+        2.f * x * aspect * tanTheta,
+        -2.f * y * tanTheta,
         -1.f);
 }
 
 inline
-Vector vertexToPixel(Vector v, std::uint32_t width, std::uint32_t height) {
+Vector vertexToPixel(Vector v, std::uint32_t width, std::uint32_t height, float fov) {
+  auto tanTheta = tanf(fov / 2.f);
   float w = width;
   float h = height;
-  float fovx = Pi/4;
-  float fovy = (h/w) * fovx;
-  auto tanfovx = tanf(fovx);
-  auto tanfovy = tanf(fovy);
-  auto x = -v.x / v.z;
-  auto y = v.y / v.z;
-  auto px = (w/2.f) * ((x/tanfovx) + 1.f);
-  auto py = (h/2.f) * ((y/tanfovy) + 1.f);
-  return Vector(px, py, v.z);
+  auto aspect = w / h;
+  auto px = v.x / (2.f * aspect * tanTheta);
+  auto py = v.y / (-2.f * tanTheta);
+  px += .5f;
+  py += .5f;
+  px *= w;
+  py *= h;
+  return Vector(px, py, -v.z);
 }
 
 inline

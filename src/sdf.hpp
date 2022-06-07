@@ -41,8 +41,9 @@ void reflect(light::Ray& ray, light::Vector normal) {
 
 // Glass/refractive BRDF - we use the vector version of Snell's law and Fresnel's law
 // to compute the outgoing reflection and refraction directions and probability weights.
+// Returns true if the ray was refracted.
 inline
-void refract(light::Ray& ray, light::Vector normal,
+bool refract(light::Ray& ray, light::Vector normal,
              float ri, float rnd1) {
   auto R0 = (1.f - ri)/(1.f + ri);
   R0 = R0 * R0;
@@ -58,8 +59,10 @@ void refract(light::Ray& ray, light::Vector normal,
   auto Rprob = R0 + (1.f - R0) * (schlickBase2 * schlickBase * schlickBase2); // Schlick-approximation
   if (cost2 > 0.f && rnd1 > Rprob) { // refraction direction
     ray.direction = ((ray.direction * ri) + (normal*(ri*cost1 - sqrtf(cost2)))).normalized();
+    return true;
   } else { // reflection direction
     ray.direction = (ray.direction + normal*(cost1*2.f)).normalized();
+    return false;
   }
 }
 
