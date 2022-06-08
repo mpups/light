@@ -193,10 +193,10 @@ struct Scene {
 
 inline
 Vector pixelToRay(float x, float y, std::uint32_t width, std::uint32_t height, float fov) {
-  float w = width;
-  float h = height;
-  float aspect = w / h;
-  auto tanTheta = tanf(fov / 2.f);
+  const float w = width;
+  const float h = height;
+  const float aspect = w / h;
+  const auto tanTheta = tanf(fov / 2.f);
   x = (x / w) - .5f;
   y = (y / h) - .5f;
   return Vector(
@@ -207,10 +207,10 @@ Vector pixelToRay(float x, float y, std::uint32_t width, std::uint32_t height, f
 
 inline
 Vector vertexToPixel(Vector v, std::uint32_t width, std::uint32_t height, float fov) {
-  auto tanTheta = tanf(fov / 2.f);
-  float w = width;
-  float h = height;
-  auto aspect = w / h;
+  const float w = width;
+  const float h = height;
+  const float aspect = w / h;
+  const auto tanTheta = tanf(fov / 2.f);
   auto px = v.x / (2.f * aspect * tanTheta);
   auto py = v.y / (-2.f * tanTheta);
   px += .5f;
