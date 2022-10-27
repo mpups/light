@@ -261,7 +261,7 @@ int main(int argc, char** argv) {
     for (std::size_t j = 0; j < jobs.size(); ++j) {
       auto& job = jobs[j];
       job.visitPixels([&] (std::size_t row, std::size_t col, Vector& p) {
-        constexpr float fov = light::Pi;
+        constexpr float fov = light::Pi/2.f;
         Vector cam = pixelToRay(col, row, width, height, fov); // construct image plane coordinates
         Vector aaNoise(xoshiro::uniform_neg1_1(job.rngState), xoshiro::uniform_neg1_1(job.rngState), 0.f);
         cam += aaNoise * antiAliasingScale;
