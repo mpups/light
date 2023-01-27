@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+
 // Stack with a fixed maximum capacity with similar interface
 // to std::vector for quick porting of existing code:
 template <typename T, std::size_t Capacity>
